@@ -1,0 +1,17 @@
+# FastAPI
+fastapi==0.85.1
+
+# Uvicorn (for running the API)
+uvicorn==0.17.6
+
+# Pydantic for data validation
+pydantic==1.9.1
+
+# Starlette (FastAPI is built on top of Starlette)
+starlette==0.19.1
+
+# SQLAlchemy for ORM (if you plan to use a database later)
+sqlalchemy==1.4.36
+
+# Alembic for database migrations (if you plan to use a database later)
+alembic==1.7.4
