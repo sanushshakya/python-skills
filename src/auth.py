@@ -15,28 +15,32 @@ router = APIRouter()
 # Define a Pydantic model for the registration request
 class RegisterRequest(BaseModel):
     """
-    Model for user registration.
-    
-    Contains fields for username, email, and password.
+    Model for user registration requests.
     """
-    username: str
+    name: str
     email: str
     password: str
 
 # Define a Pydantic model for the login request
 class LoginRequest(BaseModel):
     """
-    Model for user login.
-    
-    Contains fields for username and password.
+    Model for user login requests.
     """
-    username: str
+    email: str
     password: str
 
-# Password hashing context
+# Define a Pydantic model for the JWT token response
+class TokenResponse(BaseModel):
+    """
+    Model for the JWT token response.
+    """
+    access_token: str
+    token_type: str = "bearer"
+
+# Password hashing and verification
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT secret key (replace with a secure value in production)
+# Secret key for JWT encoding/decoding
 SECRET_KEY = "your-secret-key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -45,28 +49,64 @@ def verify_password(plain_password, hashed_password):
     """
     Verify if the plain password matches the hashed password.
     
-    :param plain_password: The plain text password.
-    :param hashed_password: The hashed password.
-    :return: True if passwords match, False otherwise.
+    Args:
+        plain_password (str): The plain text password to verify.
+        hashed_password (str): The hashed password to compare against.
+        
+    Returns:
+        bool: True if passwords match, False otherwise.
     """
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password):
     """
-    Get the hashed version of a password.
+    Hash a plain password.
     
-    :param password: The plain text password.
-    :return: The hashed password.
+    Args:
+        password (str): The plain text password to hash.
+        
+    Returns:
+        str: The hashed password.
     """
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: timedelta = None):
+async def authenticate_user(email: str, password: str):
+    """
+    Authenticate a user by email and password.
+    
+    Args:
+        email (str): The user's email.
+        password (str): The plain text password.
+        
+    Returns:
+        dict or None: User details if authentication is successful, None otherwise.
+    """
+    # Here you would typically query your database to find the user by email
+    fake_users_db = {
+        "johndoe@example.com": {
+            "name": "John Doe",
+            "email": "johndoe@example.com",
+            "hashed_password": "$2b$12$.eixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW"
+        }
+    }
+    
+    user = fake_users_db.get(email)
+    if not user:
+        return False
+    if not verify_password(password, user["hashed_password"]):
+        return False
+    return user
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     """
     Create a JWT access token.
     
-    :param data: Data to be encoded in the token.
-    :param expires_delta: Expiration time for the token.
-    :return: Encoded JWT access token.
+    Args:
+        data (dict): The data to encode in the token.
+        expires_delta (timedelta, optional): The time until the token expires. Defaults to 30 minutes.
+        
+    Returns:
+        str: The encoded JWT token.
     """
     to_encode = data.copy()
     if expires_delta:
@@ -77,21 +117,29 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-@router.post("/auth/register", response_model=dict)
-async def register_user(request: RegisterRequest):
+@router.post("/auth/login", response_model=TokenResponse)
+async def login_for_access_token(form_data: LoginRequest):
     """
-    Register a new user.
+    Endpoint for user login. Returns a JWT access token if credentials are valid.
     
-    :param request: User registration data.
-    :return: A dictionary indicating the result of the operation.
+    Args:
+        form_data (LoginRequest): The login request containing email and password.
+        
+    Raises:
+        HTTPException: If authentication fails.
+        
+    Returns:
+        TokenResponse: The JWT access token and token type.
     """
-    # Hash the password before storing it
-    hashed_password = get_password_hash(request.password)
-    
-    # Here you would typically store the user in your database
-    # For demonstration, we'll just return a success message
-    
-    return {"message": "User registered successfully", "hashed_password": hashed_password}
-```
-
-This file defines the `/auth/register` endpoint for registering new users. The `RegisterRequest` Pydantic model is used to validate incoming data, and the password is hashed using bcrypt before being stored. The `create_access_token` function is defined but not used in this snippet; it can be implemented later for user authentication.
+    user = await authenticate_user(form_data.email, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["email"]}, expires_delta=access_token_expires
+    )
+    return TokenResponse(access_token=access_token, token_type="bearer")
