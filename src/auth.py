@@ -15,98 +15,65 @@ router = APIRouter()
 # Define a Pydantic model for the registration request
 class RegisterRequest(BaseModel):
     """
-    Model for user registration requests.
+    Model for user registration.
     """
     name: str
     email: str
     password: str
 
+
 # Define a Pydantic model for the login request
 class LoginRequest(BaseModel):
     """
-    Model for user login requests.
+    Model for user login.
     """
     email: str
     password: str
 
-# Define a Pydantic model for the JWT token response
-class TokenResponse(BaseModel):
-    """
-    Model for the JWT token response.
-    """
-    access_token: str
-    token_type: str = "bearer"
 
-# Password hashing and verification
+# Define a Pydantic model for the forgot password request
+class ForgotPasswordRequest(BaseModel):
+    """
+    Model for requesting a password reset.
+    """
+    email: str
+
+
+# Define a Pydantic model for the update password request
+class UpdatePasswordRequest(BaseModel):
+    """
+    Model for updating a user's password.
+    """
+    reset_token: str
+    new_password: str
+
+
+# Initialize a CryptContext for hashing passwords
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Secret key for JWT encoding/decoding
+# JWT configuration
 SECRET_KEY = "your-secret-key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+
 def verify_password(plain_password, hashed_password):
     """
-    Verify if the plain password matches the hashed password.
-    
-    Args:
-        plain_password (str): The plain text password to verify.
-        hashed_password (str): The hashed password to compare against.
-        
-    Returns:
-        bool: True if passwords match, False otherwise.
+    Verify if a plain password matches the hashed password.
     """
     return pwd_context.verify(plain_password, hashed_password)
 
+
 def get_password_hash(password):
     """
-    Hash a plain password.
-    
-    Args:
-        password (str): The plain text password to hash.
-        
-    Returns:
-        str: The hashed password.
+    Generate a hashed version of the password.
     """
     return pwd_context.hash(password)
 
-async def authenticate_user(email: str, password: str):
-    """
-    Authenticate a user by email and password.
-    
-    Args:
-        email (str): The user's email.
-        password (str): The plain text password.
-        
-    Returns:
-        dict or None: User details if authentication is successful, None otherwise.
-    """
-    # Here you would typically query your database to find the user by email
-    fake_users_db = {
-        "johndoe@example.com": {
-            "name": "John Doe",
-            "email": "johndoe@example.com",
-            "hashed_password": "$2b$12$.eixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW"
-        }
-    }
-    
-    user = fake_users_db.get(email)
-    if not user:
-        return False
-    if not verify_password(password, user["hashed_password"]):
-        return False
-    return user
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
+def create_access_token(data: dict, expires_delta: timedelta = None):
     """
     Create a JWT access token.
-    
-    Args:
-        data (dict): The data to encode in the token.
-        expires_delta (timedelta, optional): The time until the token expires. Defaults to 30 minutes.
-        
-    Returns:
-        str: The encoded JWT token.
     """
     to_encode = data.copy()
     if expires_delta:
@@ -117,29 +84,101 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-@router.post("/auth/login", response_model=TokenResponse)
-async def login_for_access_token(form_data: LoginRequest):
+
+def decode_access_token(token: str):
     """
-    Endpoint for user login. Returns a JWT access token if credentials are valid.
-    
-    Args:
-        form_data (LoginRequest): The login request containing email and password.
-        
-    Raises:
-        HTTPException: If authentication fails.
-        
-    Returns:
-        TokenResponse: The JWT access token and token type.
+    Decode a JWT access token.
     """
-    user = await authenticate_user(form_data.email, form_data.password)
-    if not user:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+# Dummy user database for demonstration purposes
+users_db = {
+    "user@example.com": {
+        "id": 1,
+        "name": "John Doe",
+        "hashed_password": get_password_hash("secret"),
+        "reset_token": None,
+    }
+}
+
+
+@router.post("/auth/register", response_model=dict)
+async def register(user: RegisterRequest):
+    """
+    Endpoint to register a new user.
+    """
+    if user.email in users_db:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+        )
+    hashed_password = get_password_hash(user.password)
+    users_db[user.email] = {
+        "id": len(users_db) + 1,
+        "name": user.name,
+        "hashed_password": hashed_password,
+        "reset_token": None,
+    }
+    return {"message": "User registered successfully"}
+
+
+@router.post("/auth/login", response_model=dict)
+async def login(user: LoginRequest):
+    """
+    Endpoint to log in a user and return an access token.
+    """
+    if user.email not in users_db:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email not registered"
+        )
+    stored_user = users_db[user.email]
+    if not verify_password(user.password, stored_user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password"
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user["email"]}, expires_delta=access_token_expires
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
-    return TokenResponse(access_token=access_token, token_type="bearer")
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/auth/forgot-password", response_model=dict)
+async def forgot_password(user: ForgotPasswordRequest):
+    """
+    Endpoint to request a password reset.
+    """
+    if user.email not in users_db:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email not registered"
+        )
+    stored_user = users_db[user.email]
+    # In a real application, you would generate and send an email with the reset token
+    reset_token = "your-reset-token-here"
+    stored_user["reset_token"] = reset_token
+    return {"message": f"Password reset token sent to {user.email}"}
+
+
+@router.post("/auth/update-password", response_model=dict)
+async def update_password(user: UpdatePasswordRequest):
+    """
+    Endpoint to update a user's password using a reset token.
+    """
+    if user.reset_token not in users_db.values():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid reset token"
+        )
+    for user_data in users_db.values():
+        if user_data["reset_token"] == user.reset_token:
+            hashed_password = get_password_hash(user.new_password)
+            user_data["hashed_password"] = hashed_password
+            user_data["reset_token"] = None
+            return {"message": "Password updated successfully"}
