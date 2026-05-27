@@ -104,76 +104,92 @@ def register_user(user: User):
 @app.post("/auth/login", response_model=User)
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """
-    Authenticate a user and return a JWT token.
+    Login a user and return a JWT token.
 
     Args:
-        form_data (OAuth2PasswordRequestForm): The username and password provided by the user.
+        form_data (OAuth2PasswordRequestForm): The user's email and password.
 
     Returns:
         User: The authenticated user data.
     """
-    user = get_user_by_email(email=form_data.username)
-    if not user or not pwd_context.verify(form_data.password, user["hashed_password"]):
+    user = authenticate_user(users_db, form_data.username, form_data.password)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user["email"]}, expires_delta=access_token_expires
-    )
-    return {"id": user["id"], "name": user["name"], "email": user["email"], "access_token": access_token, "token_type": "bearer"}
+    access_token = create_access_token(data={"sub": user["email"]}, expires_delta=access_token_expires)
+    return {"access_token": access_token, "token_type": "bearer", "user": user}
 
-# Endpoint to forgot password and receive a reset token
-@app.post("/auth/forgot-password", response_model=User)
-def forgot_password(user: User):
+# Endpoint to update an existing user
+@app.put("/users/{user_id}", response_model=User)
+def update_user(user_id: int, updated_user: User, current_user: dict = Depends(get_current_user)):
     """
-    Generate a reset token for the user.
+    Update an existing user.
 
     Args:
-        user (User): The user data whose password needs to be reset.
+        user_id (int): The ID of the user to update.
+        updated_user (User): The new data for the user.
+        current_user (dict): The currently authenticated user.
 
     Returns:
-        User: The user data with the reset token.
+        User: The updated user data.
     """
-    reset_token = generate_reset_token()
-    user["reset_token"] = reset_token
+    if not current_user["id"] == user_id:
+        raise HTTPException(status_code=403, detail="You are not authorized to update this user")
+    user = get_user(user_id)
+    user.update({"name": updated_user.name, "email": updated_user.email})
     return user
 
-# Endpoint to update password using a reset token
-@app.post("/auth/update-password", response_model=User)
-def update_password(user: User, new_password: str):
+# Endpoint to delete a user
+@app.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(user_id: int, current_user: dict = Depends(get_current_user)):
     """
-    Update the user's password using a reset token.
+    Delete an existing user.
 
     Args:
-        user (User): The user data whose password needs to be updated.
-        new_password (str): The new password for the user.
+        user_id (int): The ID of the user to delete.
+        current_user (dict): The currently authenticated user.
 
     Returns:
-        User: The user data with the updated password.
+        None
     """
-    if not user["reset_token"]:
-        raise HTTPException(status_code=400, detail="No reset token available")
-    hashed_new_password = pwd_context.hash(new_password)
-    user["hashed_password"] = hashed_new_password
-    user["reset_token"] = None
-    return user
+    if not current_user["id"] == user_id:
+        raise HTTPException(status_code=403, detail="You are not authorized to delete this user")
+    global users_db
+    users_db = [user for user in users_db if user["id"] != user_id]
 
-# Helper function to get user by email
-def get_user_by_email(email: str) -> dict:
+# Endpoint to list all users
+@app.get("/users", response_model=List[User])
+def list_users(current_user: dict = Depends(get_current_user)):
     """
-    Retrieve a user by their email.
+    List all users.
 
     Args:
-        email (str): The email of the user to retrieve.
+        current_user (dict): The currently authenticated user.
 
     Returns:
-        dict: The user data if found.
+        List[User]: A list of all users.
     """
-    for user in users_db:
-        if user["email"] == email:
+    return users_db
+
+# Helper function to authenticate a user
+def authenticate_user(users: List[dict], username: str, password: str) -> Optional[dict]:
+    """
+    Authenticate a user by checking the email and password.
+
+    Args:
+        users (List[dict]): The list of users.
+        username (str): The user's email.
+        password (str): The user's password.
+
+    Returns:
+        dict: The authenticated user if found, None otherwise.
+    """
+    for user in users:
+        if user["email"] == username and pwd_context.verify(password, user["hashed_password"]):
             return user
     return None
 
@@ -183,11 +199,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     Create a JWT access token.
 
     Args:
-        data (dict): The data to encode in the token.
-        expires_delta (Optional[timedelta]): The time until the token expires.
+        data (dict): The data to be encoded in the token.
+        expires_delta (Optional[timedelta]): The expiration time for the token.
 
     Returns:
-        str: The encoded JWT token.
+        str: The JWT access token.
     """
     to_encode = data.copy()
     if expires_delta:
@@ -197,17 +213,3 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
-
-# Helper function to generate a reset token
-def generate_reset_token():
-    """
-    Generate a unique reset token.
-
-    Returns:
-        str: The generated reset token.
-    """
-    import secrets
-    return secrets.token_urlsafe(16)
-```
-
-This updated `src/main.py` file includes the necessary changes to add `hashed_password` and `reset_token` fields to the `User` model, as well as implementing the `/auth/register`, `/auth/login`, `/auth/forgot-password`, and `/auth/update-password` endpoints.
