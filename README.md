@@ -1,6 +1,6 @@
 # User Management API
 
-This project provides a simple CRUD API for managing users using FastAPI. The API allows you to create, read, update, and delete user records.
+This project provides a simple CRUD API for managing users using FastAPI. The API allows you to create, read, update, and delete user records. It also includes JWT authentication for secure access.
 
 ## Features
 
@@ -8,12 +8,15 @@ This project provides a simple CRUD API for managing users using FastAPI. The AP
 - **User Retrieval**: Fetch individual users by their ID or list all users.
 - **User Update**: Modify the details of an existing user.
 - **User Deletion**: Remove a user from the system.
+- **Authentication**: Secure access using JWT tokens for /auth/register, /auth/login, /auth/forgot-password, and /auth/update-password endpoints.
 
 ## Requirements
 
 - Python 3.7+
 - FastAPI
 - Uvicorn (for running the API)
+- PyJWT for handling JWT tokens
+- Passlib for password hashing
 
 ## Installation
 
@@ -25,7 +28,7 @@ This project provides a simple CRUD API for managing users using FastAPI. The AP
 
 2. Install the dependencies:
    ```bash
-   pip install fastapi uvicorn
+   pip install fastapi uvicorn pyjwt passlib[bcrypt]
    ```
 
 3. Run the application:
@@ -37,34 +40,42 @@ This project provides a simple CRUD API for managing users using FastAPI. The AP
 
 ### Create a New User
 
-Send a POST request to `/users/` with user data in JSON format.
+Send a POST request to `/auth/register` with user data in JSON format.
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/users/" -H "Content-Type: application/json" -d '{"name": "John Doe", "email": "john.doe@example.com"}'
+curl -X POST "http://127.0.0.1:8000/auth/register" -H "Content-Type: application/json" -d '{"name": "John Doe", "email": "john.doe@example.com", "password": "securepassword"}'
 ```
 
-### Retrieve a User
+### Login and Get JWT Token
 
-Send a GET request to `/users/{user_id}` to fetch a specific user.
+Send a POST request to `/auth/login` with credentials in JSON format.
 
 ```bash
-curl http://127.0.0.1:8000/users/1
+curl -X POST "http://127.0.0.1:8000/auth/login" -H "Content-Type: application/json" -d '{"email": "john.doe@example.com", "password": "securepassword"}'
 ```
 
-### Update a User
+### Forgot Password
 
-Send a PUT request to `/users/{user_id}` with updated user data in JSON format.
+Send a POST request to `/auth/forgot-password` with the user's email.
 
 ```bash
-curl -X PUT "http://127.0.0.1:8000/users/1" -H "Content-Type: application/json" -d '{"name": "Jane Doe", "email": "jane.doe@example.com"}'
+curl -X POST "http://127.0.0.1:8000/auth/forgot-password" -H "Content-Type: application/json" -d '{"email": "john.doe@example.com"}'
 ```
 
-### Delete a User
+### Update Password
 
-Send a DELETE request to `/users/{user_id}` to remove a user.
+Send a PUT request to `/auth/update-password` with the user's email and new password.
 
 ```bash
-curl -X DELETE http://127.0.0.1:8000/users/1
+curl -X PUT "http://127.0.0.1:8000/auth/update-password" -H "Content-Type: application/json" -d '{"email": "john.doe@example.com", "new_password": "newsecurepassword"}'
+```
+
+### Create a New User (Authenticated)
+
+Send a POST request to `/users/` with user data in JSON format and include the JWT token in the Authorization header.
+
+```bash
+curl -X POST "http://127.0.0.1:8000/users/" -H "Content-Type: application/json" -H "Authorization: Bearer <jwt_token>" -d '{"name": "Jane Doe", "email": "jane.doe@example.com"}'
 ```
 
 ## Project Structure
@@ -76,7 +87,8 @@ python-skills/
 ├── src/
 │   ├── config.py       # Configuration settings for the API
 │   ├── main.py         # Main application logic and routes
-│   └── utils.py        # Utility functions
+│   ├── models.py     # User model with hashed_password and reset_token fields
+│   └── utils.py        # Utility functions including JWT handling
 └── tests/
     └── test_main.py  # Test suite for the API
 ```
