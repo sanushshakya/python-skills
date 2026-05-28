@@ -1,4 +1,3 @@
---- UPDATED CONTENT OF README.md ---
 # User Management API
 
 This project provides a simple CRUD API for managing users using FastAPI. The API allows you to create, read, update, and delete user records. It also includes JWT authentication for secure access.
@@ -91,9 +90,23 @@ python-skills/
 │   ├── models.py     # User model with hashed_password, reset_token, and role fields
 │   └── utils.py        # Utility functions including JWT handling
 └── tests/
-    └── test_main.py  # Test suite for the API
+    └── tes
 ```
 
-## Contributing
+## Updated Features
 
-Contributions are welcome! Please fork the repository and submit a pull request. Make sure to include tests for new features or bug fixes.
+### Role Field in User Model
+
+The `User` model now includes a `role` field to specify the user's role. This field can be one of "user", "admin", or any other role defined by your application.
+
+### Require Role Dependency
+
+A new dependency, `require_role`, is introduced to restrict access to certain routes based on the user's role. For example, only users with the "admin" role can create, update, and delete users.
+
+### Restricted CRUD Routes
+
+- **Create User**: Only accessible to users with the "admin" role.
+- **Update User**: Only accessible to users with the "admin" role or the user themselves.
+- **Delete User**: Only accessible to users with the "admin" role or the user themselves.
+
+These changes ensure that your API adheres to a more robust security model, where roles dictate access to specific functionalities. This aligns with best practices for managing user privileges in web applications.
