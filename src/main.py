@@ -12,7 +12,7 @@ app = FastAPI(title="User Management API", description="A simple CRUD API for ma
 # In-memory database simulation using a list
 users_db: List[dict] = []
 
-# User model with role field
+# User model with role and is_verified fields
 class User(BaseModel):
     id: int
     name: str
@@ -20,6 +20,7 @@ class User(BaseModel):
     hashed_password: Optional[str] = None
     reset_token: Optional[str] = None
     role: str = "user"  # Default role to 'user'
+    is_verified: bool = False  # New field to indicate if the user's email is verified
 
 # Dependency to fetch user by ID
 def get_user(user_id: int) -> dict:
@@ -95,90 +96,134 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = "your-secret-key"
 ALGORITHM = "HS256"
 
-@app.post("/user", status_code=status.HTTP_201_CREATED)
-async def create_user(user: User, current_user: dict = Depends(require_role("admin"))):
+@app.post("/auth/register", response_model=User)
+def register_user(form_data: RegisterRequest):
     """
-    Create a new user.
+    Register a new user.
 
     Args:
-        user (User): The user data to be created.
-        current_user (dict): The currently authenticated user, must have 'admin' role.
+        form_data (RegisterRequest): The data for the new user.
 
     Returns:
-        dict: The newly created user.
+        User: The created user.
+
+    Raises:
+        HTTPException: If an email already exists.
     """
-    if any(u["email"] == user.email for u in users_db):
+    # Check if the email is already registered
+    existing_user = next((user for user in users_db if user["email"] == form_data.email), None)
+    if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Create a new user
+    new_user_id = len(users_db) + 1
+    hashed_password = pwd_context.hash(form_data.password)
     new_user = {
-        "id": len(users_db) + 1,
-        **user.dict(),
-        "hashed_password": pwd_context.hash(user.hashed_password),
+        "id": new_user_id,
+        "name": form_data.name,
+        "email": form_data.email,
+        "hashed_password": hashed_password,
+        "role": "user",
+        "is_verified": False
     }
     users_db.append(new_user)
     return new_user
 
-@app.get("/users", status_code=status.HTTP_200_OK, response_model=List[User])
-async def read_users(current_user: dict = Depends(require_role("admin"))):
+@app.post("/auth/login", response_model=User)
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """
-    Retrieve all users.
+    Authenticate a user and return a JWT token.
 
     Args:
-        current_user (dict): The currently authenticated user, must have 'admin' role.
+        form_data (OAuth2PasswordRequestForm): The username and password provided by the user.
+
+    Returns:
+        User: The authenticated user.
+    """
+    # Find the user in the database
+    user = next((user for user in users_db if user["email"] == form_data.username), None)
+    if not user or not pwd_context.verify(form_data.password, user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+
+    # Create a JWT token
+    access_token_expires = timedelta(minutes=30)
+    access_token = create_access_token(
+        data={"sub": user["email"]}, expires_delta=access_token_expires
+    )
+    return {"id": user["id"], "name": user["name"], "email": user["email"], "role": user["role"], "is_verified": user["is_verified"], "token": access_token}
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """
+    Create a JWT token.
+
+    Args:
+        data (dict): The payload of the token.
+        expires_delta (Optional[timedelta]): The time until the token expires. If None, the default is 30 minutes.
+
+    Returns:
+        str: The encoded JWT token.
+    """
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+@app.get("/users/{user_id}", response_model=User)
+def read_user(user_id: int):
+    """
+    Retrieve a user by their ID.
+
+    Args:
+        user_id (int): The ID of the user to retrieve.
+
+    Returns:
+        User: The requested user.
+    """
+    user = get_user(user_id)
+    return user
+
+@app.get("/users", response_model=List[User])
+def read_users():
+    """
+    Retrieve all users.
 
     Returns:
         List[User]: A list of all users.
     """
     return users_db
 
-@app.get("/user/{user_id}", status_code=status.HTTP_200_OK, response_model=User)
-async def read_user(user_id: int, current_user: dict = Depends(require_role("admin"))):
+@app.put("/users/{user_id}", response_model=User)
+@require_role("admin")
+def update_user(user_id: int, user: User):
     """
-    Retrieve a specific user by ID.
-
-    Args:
-        user_id (int): The ID of the user to retrieve.
-        current_user (dict): The currently authenticated user, must have 'admin' role.
-
-    Returns:
-        User: The retrieved user.
-    """
-    return get_user(user_id)
-
-@app.put("/user/{user_id}", status_code=status.HTTP_200_OK, response_model=User)
-async def update_user(user_id: int, user_update: User, current_user: dict = Depends(require_role("admin"))):
-    """
-    Update a specific user by ID.
+    Update a user by their ID.
 
     Args:
         user_id (int): The ID of the user to update.
-        user_update (User): The updated user data.
-        current_user (dict): The currently authenticated user, must have 'admin' role.
+        user (User): The new data for the user.
 
     Returns:
         User: The updated user.
     """
-    if not any(u["id"] == user_id for u in users_db):
-        raise HTTPException(status_code=404, detail="User not found")
     existing_user = get_user(user_id)
-    updated_user = {
-        **existing_user,
-        **user_update.dict(),
-    }
-    users_db[users_db.index(existing_user)] = updated_user
-    return updated_user
+    existing_user.update(user.dict(exclude_unset=True))
+    return existing_user
 
-@app.delete("/user/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user_id: int, current_user: dict = Depends(require_role("admin"))):
+@app.delete("/users/{user_id}")
+@require_role("admin")
+def delete_user(user_id: int):
     """
-    Delete a specific user by ID.
+    Delete a user by their ID.
 
     Args:
         user_id (int): The ID of the user to delete.
-        current_user (dict): The currently authenticated user, must have 'admin' role.
 
     Returns:
         None
     """
-    if not any(u["id"] == user_id for u in users_db):
-        raise HTTPException(status_code=404, detail="User not found")
-    users_db[:] = [u for u in users_db if u["id"] != user_id]
+    global users_db
+    users_db = [user for user in users_db if user["id"] != user_id]
