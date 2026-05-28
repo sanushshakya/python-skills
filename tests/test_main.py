@@ -1,119 +1,153 @@
-"""
-Test suite for the User Management API.
-
-This module contains unit tests for the main functionality of the User Management API,
-including CRUD operations for users. The tests use Pytest to verify that the API behaves as expected.
-"""
-
-from fastapi.testclient import TestClient
-from src.main import app, users_db, get_user
 import pytest
+from fastapi.testclient import TestClient
+from src.main import app, get_current_user, User, Role
+from sqlalchemy.orm import Session
 
-# Initialize the test client with the FastAPI app
+# Test client to interact with the API
 client = TestClient(app)
 
-def test_create_user():
-    """
-    Test creating a new user.
+# Fixture to create a test user and role in the database
+@pytest.fixture(scope="module")
+def db_user_role(db: Session):
+    # Create a new role for testing
+    role = Role(name="admin")
+    db.add(role)
+    db.commit()
+    db.refresh(role)
 
-    This test sends a POST request to create a new user and checks if the response status code is 201.
-    It also verifies that the user has been added to the in-memory database.
-    """
-    user_data = {
-        "id": 1,
-        "name": "John Doe",
-        "email": "john.doe@example.com"
+    # Create a new user with the admin role
+    test_user = User(
+        name="testuser",
+        email="testuser@example.com",
+        password="password123",
+        role_id=role.id
+    )
+    db.add(test_user)
+    db.commit()
+    db.refresh(test_user)
+
+    yield test_user
+
+# Test case to ensure only users with the correct role can perform CRUD operations
+def test_crud_operations_with_role(db_user_role: User, db: Session):
+    # Attempt to create a new user without a JWT token (should fail)
+    response = client.post("/users/", json={"name": "newuser", "email": "newuser@example.com", "password": "password123"})
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+    # Authenticate with a JWT token (use the test user's role)
+    login_data = {
+        "username": db_user_role.email,
+        "password": "password123"
     }
-    response = client.post("/users/", json=user_data)
+    response = client.post("/token", data=login_data)
+    assert response.status_code == 200
+    access_token = response.json().get("access_token")
+
+    # Create a new user with the JWT token (should succeed)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = client.post("/users/", json={"name": "newuser", "email": "newuser@example.com", "password": "password123"}, headers=headers)
     assert response.status_code == 201
-    assert len(users_db) == 1
-    assert users_db[0] == user_data
+    new_user_id = response.json().get("id")
 
-def test_get_user():
-    """
-    Test retrieving an existing user by ID.
-
-    This test sends a GET request to retrieve a user and checks if the response status code is 200.
-    It also verifies that the returned user data matches the expected data.
-    """
-    # Ensure there's at least one user in the database
-    test_create_user()
-    user_id = users_db[0]['id']
-    response = client.get(f"/users/{user_id}")
+    # Retrieve the newly created user (should succeed)
+    response = client.get(f"/users/{new_user_id}", headers=headers)
     assert response.status_code == 200
-    assert response.json() == users_db[0]
+    retrieved_user = response.json()
+    assert retrieved_user["name"] == "newuser"
+    assert retrieved_user["email"] == "newuser@example.com"
 
-def test_get_user_not_found():
-    """
-    Test retrieving a non-existent user by ID.
-
-    This test sends a GET request for a non-existent user and checks if the response status code is 404.
-    """
-    # Use an ID that doesn't exist
-    response = client.get("/users/999")
-    assert response.status_code == 404
-
-def test_update_user():
-    """
-    Test updating an existing user.
-
-    This test sends a PUT request to update an existing user and checks if the response status code is 200.
-    It also verifies that the user data in the database has been updated.
-    """
-    # Ensure there's at least one user in the database
-    test_create_user()
-    user_id = users_db[0]['id']
-    updated_data = {
-        "name": "Jane Doe",
-        "email": "jane.doe@example.com"
-    }
-    response = client.put(f"/users/{user_id}", json=updated_data)
+    # Update the newly created user (should succeed)
+    update_data = {"name": "updateduser", "email": "updateduser@example.com"}
+    response = client.put(f"/users/{new_user_id}", json=update_data, headers=headers)
     assert response.status_code == 200
-    # Update the user in the database simulation
-    users_db[0].update(updated_data)
-    assert users_db[0]['name'] == "Jane Doe"
+    updated_user = response.json()
+    assert updated_user["name"] == "updateduser"
+    assert updated_user["email"] == "updateduser@example.com"
 
-def test_delete_user():
-    """
-    Test deleting an existing user.
-
-    This test sends a DELETE request to delete an existing user and checks if the response status code is 204.
-    It also verifies that the user has been removed from the in-memory database.
-    """
-    # Ensure there's at least one user in the database
-    test_create_user()
-    user_id = users_db[0]['id']
-    response = client.delete(f"/users/{user_id}")
+    # Delete the newly created user (should succeed)
+    response = client.delete(f"/users/{new_user_id}", headers=headers)
     assert response.status_code == 204
-    assert len(users_db) == 0
 
-def test_delete_user_not_found():
-    """
-    Test deleting a non-existent user.
+# Test case to ensure that users without the correct role cannot perform CRUD operations
+def test_crud_operations_without_role(db: Session):
+    # Create a new user with a different role (e.g., "user")
+    role = Role(name="user")
+    db.add(role)
+    db.commit()
+    db.refresh(role)
 
-    This test sends a DELETE request for a non-existent user and checks if the response status code is 404.
-    """
-    # Use an ID that doesn't exist
-    response = client.delete("/users/999")
-    assert response.status_code == 404
+    test_user = User(
+        name="testuser2",
+        email="testuser2@example.com",
+        password="password123",
+        role_id=role.id
+    )
+    db.add(test_user)
+    db.commit()
+    db.refresh(test_user)
 
-def test_dependency_get_user():
-    """
-    Test the dependency function get_user.
+    # Authenticate with a JWT token (use the test user's role)
+    login_data = {
+        "username": test_user.email,
+        "password": "password123"
+    }
+    response = client.post("/token", data=login_data)
+    assert response.status_code == 200
+    access_token = response.json().get("access_token")
 
-    This test verifies that the get_user function correctly retrieves a user by ID from the database.
-    """
-    # Ensure there's at least one user in the database
-    test_create_user()
-    user_id = users_db[0]['id']
-    user = get_user(user_id)
-    assert user == users_db[0]
+    # Attempt to create a new user with the JWT token (should fail due to role restriction)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = client.post("/users/", json={"name": "newuser", "email": "newuser@example.com", "password": "password123"}, headers=headers)
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Insufficient permissions"}
 
-def test_dependency_get_user_not_found():
-    """
-    Test the dependency function get_user for a non-existent user.
+# Test case to ensure that the role dependency is working correctly
+def test_role_dependency(db_user_role: User, db: Session):
+    # Authenticate with a JWT token (use the test user's role)
+    login_data = {
+        "username": db_user_role.email,
+        "password": "password123"
+    }
+    response = client.post("/token", data=login_data)
+    assert response.status_code == 200
+    access_token = response.json().get("access_token")
 
-    This test verifies that the get_user function raises an HTTPException when trying to retrieve a non-existent user.
-    """
-    with pytest.raises(HTTPException):
-        get_user(999)
+    # Call a protected endpoint with the JWT token (should succeed)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = client.get("/protected-endpoint", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"message": "Access granted"}
+
+# Test case to ensure that users without the correct role cannot access protected endpoints
+def test_protected_endpoint_without_role(db: Session):
+    # Create a new user with a different role (e.g., "user")
+    role = Role(name="user")
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+
+    test_user = User(
+        name="testuser2",
+        email="testuser2@example.com",
+        password="password123",
+        role_id=role.id
+    )
+    db.add(test_user)
+    db.commit()
+    db.refresh(test_user)
+
+    # Authenticate with a JWT token (use the test user's role)
+    login_data = {
+        "username": test_user.email,
+        "password": "password123"
+    }
+    response = client.post("/token", data=login_data)
+    assert response.status_code == 200
+    access_token = response.json().get("access_token")
+
+    # Call a protected endpoint with the JWT token (should fail due to role restriction)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = client.get("/protected-endpoint", headers=headers)
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Insufficient permissions"}
