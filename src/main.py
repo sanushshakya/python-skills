@@ -94,136 +94,91 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # JWT configuration
 SECRET_KEY = "your-secret-key"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Endpoint to create a new user
-@app.post("/auth/register", response_model=User)
-def register_user(user: User):
+@app.post("/user", status_code=status.HTTP_201_CREATED)
+async def create_user(user: User, current_user: dict = Depends(require_role("admin"))):
     """
-    Register a new user.
+    Create a new user.
 
     Args:
         user (User): The user data to be created.
+        current_user (dict): The currently authenticated user, must have 'admin' role.
 
     Returns:
-        User: The created user data.
+        dict: The newly created user.
     """
-    hashed_password = pwd_context.hash(user.password)
+    if any(u["email"] == user.email for u in users_db):
+        raise HTTPException(status_code=400, detail="Email already registered")
     new_user = {
         "id": len(users_db) + 1,
-        "name": user.name,
-        "email": user.email,
-        "hashed_password": hashed_password,
-        "role": user.role
+        **user.dict(),
+        "hashed_password": pwd_context.hash(user.hashed_password),
     }
     users_db.append(new_user)
     return new_user
 
-# Endpoint to login and receive a token
-@app.post("/auth/login", response_model=User)
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
+@app.get("/users", status_code=status.HTTP_200_OK, response_model=List[User])
+async def read_users(current_user: dict = Depends(require_role("admin"))):
     """
-    Login endpoint to receive a JWT token.
+    Retrieve all users.
 
     Args:
-        form_data (OAuth2PasswordRequestForm): The user credentials for logging in.
-
-    Returns:
-        User: The user data of the currently authenticated user.
-    """
-    user = get_user_by_email(email=form_data.username)
-    if not user or not pwd_context.verify(form_data.password, user["hashed_password"]):
-        raise HTTPException(status_code=401, detail="Incorrect username or password")
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user["email"]}, expires_delta=access_token_expires
-    )
-    user["token"] = access_token
-    return user
-
-# Helper function to create a JWT token
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """
-    Create a JWT token.
-
-    Args:
-        data (dict): The data to be encoded in the token.
-        expires_delta (Optional[timedelta]): The time until the token expires.
-
-    Returns:
-        str: The JWT token.
-    """
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-# Endpoint to get all users (admin only)
-@app.get("/users", response_model=List[User])
-def get_users(current_user: dict = Depends(require_role("admin"))):
-    """
-    Get all users.
-
-    Args:
-        current_user (dict): The currently authenticated user, required to have the 'admin' role.
+        current_user (dict): The currently authenticated user, must have 'admin' role.
 
     Returns:
         List[User]: A list of all users.
     """
     return users_db
 
-# Endpoint to get a single user by ID
-@app.get("/users/{user_id}", response_model=User)
-def get_user_by_id(user_id: int, current_user: dict = Depends(require_role("admin"))):
+@app.get("/user/{user_id}", status_code=status.HTTP_200_OK, response_model=User)
+async def read_user(user_id: int, current_user: dict = Depends(require_role("admin"))):
     """
-    Get a single user by their ID.
+    Retrieve a specific user by ID.
 
     Args:
         user_id (int): The ID of the user to retrieve.
-        current_user (dict): The currently authenticated user, required to have the 'admin' role.
+        current_user (dict): The currently authenticated user, must have 'admin' role.
 
     Returns:
-        User: The requested user data.
+        User: The retrieved user.
     """
     return get_user(user_id)
 
-# Endpoint to update a user
-@app.put("/users/{user_id}", response_model=User)
-def update_user(user_id: int, updated_user: User, current_user: dict = Depends(require_role("admin"))):
+@app.put("/user/{user_id}", status_code=status.HTTP_200_OK, response_model=User)
+async def update_user(user_id: int, user_update: User, current_user: dict = Depends(require_role("admin"))):
     """
-    Update a user.
+    Update a specific user by ID.
 
     Args:
         user_id (int): The ID of the user to update.
-        updated_user (User): The new data for the user.
-        current_user (dict): The currently authenticated user, required to have the 'admin' role.
+        user_update (User): The updated user data.
+        current_user (dict): The currently authenticated user, must have 'admin' role.
 
     Returns:
-        User: The updated user data.
+        User: The updated user.
     """
-    user = get_user(user_id)
-    user["name"] = updated_user.name
-    user["email"] = updated_user.email
-    user["hashed_password"] = pwd_context.hash(updated_user.password)
-    user["role"] = updated_user.role
-    return user
+    if not any(u["id"] == user_id for u in users_db):
+        raise HTTPException(status_code=404, detail="User not found")
+    existing_user = get_user(user_id)
+    updated_user = {
+        **existing_user,
+        **user_update.dict(),
+    }
+    users_db[users_db.index(existing_user)] = updated_user
+    return updated_user
 
-# Endpoint to delete a user (admin only)
-@app.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(user_id: int, current_user: dict = Depends(require_role("admin"))):
+@app.delete("/user/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: int, current_user: dict = Depends(require_role("admin"))):
     """
-    Delete a user.
+    Delete a specific user by ID.
 
     Args:
         user_id (int): The ID of the user to delete.
-        current_user (dict): The currently authenticated user, required to have the 'admin' role.
+        current_user (dict): The currently authenticated user, must have 'admin' role.
 
     Returns:
         None
     """
-    global users_db
-    users_db = [user for user in users_db if user["id"] != user_id]
+    if not any(u["id"] == user_id for u in users_db):
+        raise HTTPException(status_code=404, detail="User not found")
+    users_db[:] = [u for u in users_db if u["id"] != user_id]
