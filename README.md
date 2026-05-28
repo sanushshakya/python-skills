@@ -10,6 +10,16 @@ This project provides a simple CRUD API for managing users using FastAPI. The AP
 - **User Deletion**: Remove a user from the system.
 - **Authentication**: Secure access using JWT tokens for /auth/register, /auth/login, /auth/forgot-password, and /auth/update-password endpoints.
 
+## Updated Features
+
+### Email Verification
+
+The new feature includes email verification to ensure that users provide valid email addresses during registration. This is done by sending a verification token to the user's email address after successful registration. The user must then verify their email by clicking on the link in the verification email.
+
+### Role-Based Access Control (RBAC)
+
+Role-based access control has been implemented to allow different roles of users to have different permissions within the system. Supported roles include "user", "admin", and "superuser". Only users with appropriate roles can perform certain actions, such as deleting other users or changing user roles.
+
 ## Requirements
 
 - Python 3.7+
@@ -17,6 +27,7 @@ This project provides a simple CRUD API for managing users using FastAPI. The AP
 - Uvicorn (for running the API)
 - PyJWT for handling JWT tokens
 - Passlib for password hashing
+- Email library for sending verification emails
 
 ## Installation
 
@@ -28,7 +39,7 @@ This project provides a simple CRUD API for managing users using FastAPI. The AP
 
 2. Install the dependencies:
    ```bash
-   pip install fastapi uvicorn pyjwt passlib[bcrypt]
+   pip install fastapi uvicorn pyjwt passlib[bcrypt] email-validator
    ```
 
 3. Run the application:
@@ -93,20 +104,4 @@ python-skills/
     └── tes
 ```
 
-## Updated Features
-
-### Role Field in User Model
-
-The `User` model now includes a `role` field to specify the user's role. This field can be one of "user", "admin", or any other role defined by your application.
-
-### Require Role Dependency
-
-A new dependency, `require_role`, is introduced to restrict access to certain routes based on the user's role. For example, only users with the "admin" role can create, update, and delete users.
-
-### Restricted CRUD Routes
-
-- **Create User**: Only accessible to users with the "admin" role.
-- **Update User**: Only accessible to users with the "admin" role or the user themselves.
-- **Delete User**: Only accessible to users with the "admin" role or the user themselves.
-
-These changes ensure that your API adheres to a more robust security model, where roles dictate access to specific functionalities. This aligns with best practices for managing user privileges in web applications.
+--- END OF UPDATED CONTENT ---
