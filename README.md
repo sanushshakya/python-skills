@@ -1,12 +1,13 @@
+--- UPDATED CONTENT OF README.md ---
 # User Management API
 
 This project provides a simple CRUD API for managing users using FastAPI. The API allows you to create, read, update, and delete user records. It also includes JWT authentication for secure access.
 
 ## Features
 
-- **User Creation**: Add new users with a unique ID, name, and email.
+- **User Creation**: Add new users with a unique ID, name, email, and role.
 - **User Retrieval**: Fetch individual users by their ID or list all users.
-- **User Update**: Modify the details of an existing user.
+- **User Update**: Modify the details of an existing user, including the role.
 - **User Deletion**: Remove a user from the system.
 - **Authentication**: Secure access using JWT tokens for /auth/register, /auth/login, /auth/forgot-password, and /auth/update-password endpoints.
 
@@ -43,7 +44,7 @@ This project provides a simple CRUD API for managing users using FastAPI. The AP
 Send a POST request to `/auth/register` with user data in JSON format.
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/auth/register" -H "Content-Type: application/json" -d '{"name": "John Doe", "email": "john.doe@example.com", "password": "securepassword"}'
+curl -X POST "http://127.0.0.1:8000/auth/register" -H "Content-Type: application/json" -d '{"name": "John Doe", "email": "john.doe@example.com", "password": "securepassword", "role": "user"}'
 ```
 
 ### Login and Get JWT Token
@@ -75,7 +76,7 @@ curl -X PUT "http://127.0.0.1:8000/auth/update-password" -H "Content-Type: appli
 Send a POST request to `/users/` with user data in JSON format and include the JWT token in the Authorization header.
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/users/" -H "Content-Type: application/json" -H "Authorization: Bearer <jwt_token>" -d '{"name": "Jane Doe", "email": "jane.doe@example.com"}'
+curl -X POST "http://127.0.0.1:8000/users/" -H "Content-Type: application/json" -H "Authorization: Bearer <jwt_token>" -d '{"name": "Jane Doe", "email": "jane.doe@example.com", "role": "user"}'
 ```
 
 ## Project Structure
@@ -87,7 +88,7 @@ python-skills/
 ├── src/
 │   ├── config.py       # Configuration settings for the API
 │   ├── main.py         # Main application logic and routes
-│   ├── models.py     # User model with hashed_password and reset_token fields
+│   ├── models.py     # User model with hashed_password, reset_token, and role fields
 │   └── utils.py        # Utility functions including JWT handling
 └── tests/
     └── test_main.py  # Test suite for the API
@@ -95,8 +96,4 @@ python-skills/
 
 ## Contributing
 
-Contributions are welcome! Please fork the repository, make your changes, and submit a pull request.
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+Contributions are welcome! Please fork the repository and submit a pull request. Make sure to include tests for new features or bug fixes.
