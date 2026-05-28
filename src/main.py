@@ -12,13 +12,14 @@ app = FastAPI(title="User Management API", description="A simple CRUD API for ma
 # In-memory database simulation using a list
 users_db: List[dict] = []
 
-# User model
+# User model with role field
 class User(BaseModel):
     id: int
     name: str
     email: EmailStr
     hashed_password: Optional[str] = None
     reset_token: Optional[str] = None
+    role: str = "user"  # Default role to 'user'
 
 # Dependency to fetch user by ID
 def get_user(user_id: int) -> dict:
@@ -67,6 +68,23 @@ def get_current_user(token: str = Security(oauth2_scheme)):
         raise credentials_exception
     return user
 
+# Dependency to require a specific role for routes
+def require_role(required_role: str):
+    """
+    Dependency to check if the current user has the required role.
+
+    Args:
+        required_role (str): The role required for accessing the route.
+
+    Returns:
+        dict: The user data of the currently authenticated user if they have the required role.
+    """
+    def inner_dependency(current_user: dict = Depends(get_current_user)):
+        if current_user["role"] != required_role:
+            raise HTTPException(status_code=403, detail="Access denied")
+        return current_user
+    return inner_dependency
+
 # OAuth2 password bearer scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -95,7 +113,8 @@ def register_user(user: User):
         "id": len(users_db) + 1,
         "name": user.name,
         "email": user.email,
-        "hashed_password": hashed_password
+        "hashed_password": hashed_password,
+        "role": user.role
     }
     users_db.append(new_user)
     return new_user
@@ -104,106 +123,35 @@ def register_user(user: User):
 @app.post("/auth/login", response_model=User)
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """
-    Login a user and return a JWT token.
+    Login endpoint to receive a JWT token.
 
     Args:
-        form_data (OAuth2PasswordRequestForm): The user's email and password.
+        form_data (OAuth2PasswordRequestForm): The user credentials for logging in.
 
     Returns:
-        User: The authenticated user data.
+        User: The user data of the currently authenticated user.
     """
-    user = authenticate_user(users_db, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    user = get_user_by_email(email=form_data.username)
+    if not user or not pwd_context.verify(form_data.password, user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data={"sub": user["email"]}, expires_delta=access_token_expires)
-    return {"access_token": access_token, "token_type": "bearer", "user": user}
-
-# Endpoint to update an existing user
-@app.put("/users/{user_id}", response_model=User)
-def update_user(user_id: int, updated_user: User, current_user: dict = Depends(get_current_user)):
-    """
-    Update an existing user.
-
-    Args:
-        user_id (int): The ID of the user to update.
-        updated_user (User): The new data for the user.
-        current_user (dict): The currently authenticated user.
-
-    Returns:
-        User: The updated user data.
-    """
-    if not current_user["id"] == user_id:
-        raise HTTPException(status_code=403, detail="You are not authorized to update this user")
-    user = get_user(user_id)
-    user.update({"name": updated_user.name, "email": updated_user.email})
+    access_token = create_access_token(
+        data={"sub": user["email"]}, expires_delta=access_token_expires
+    )
+    user["token"] = access_token
     return user
 
-# Endpoint to delete a user
-@app.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(user_id: int, current_user: dict = Depends(get_current_user)):
-    """
-    Delete an existing user.
-
-    Args:
-        user_id (int): The ID of the user to delete.
-        current_user (dict): The currently authenticated user.
-
-    Returns:
-        None
-    """
-    if not current_user["id"] == user_id:
-        raise HTTPException(status_code=403, detail="You are not authorized to delete this user")
-    global users_db
-    users_db = [user for user in users_db if user["id"] != user_id]
-
-# Endpoint to list all users
-@app.get("/users", response_model=List[User])
-def list_users(current_user: dict = Depends(get_current_user)):
-    """
-    List all users.
-
-    Args:
-        current_user (dict): The currently authenticated user.
-
-    Returns:
-        List[User]: A list of all users.
-    """
-    return users_db
-
-# Helper function to authenticate a user
-def authenticate_user(users: List[dict], username: str, password: str) -> Optional[dict]:
-    """
-    Authenticate a user by checking the email and password.
-
-    Args:
-        users (List[dict]): The list of users.
-        username (str): The user's email.
-        password (str): The user's password.
-
-    Returns:
-        dict: The authenticated user if found, None otherwise.
-    """
-    for user in users:
-        if user["email"] == username and pwd_context.verify(password, user["hashed_password"]):
-            return user
-    return None
-
-# Helper function to create a JWT access token
+# Helper function to create a JWT token
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """
-    Create a JWT access token.
+    Create a JWT token.
 
     Args:
         data (dict): The data to be encoded in the token.
-        expires_delta (Optional[timedelta]): The expiration time for the token.
+        expires_delta (Optional[timedelta]): The time until the token expires.
 
     Returns:
-        str: The JWT access token.
+        str: The JWT token.
     """
     to_encode = data.copy()
     if expires_delta:
@@ -213,3 +161,69 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+# Endpoint to get all users (admin only)
+@app.get("/users", response_model=List[User])
+def get_users(current_user: dict = Depends(require_role("admin"))):
+    """
+    Get all users.
+
+    Args:
+        current_user (dict): The currently authenticated user, required to have the 'admin' role.
+
+    Returns:
+        List[User]: A list of all users.
+    """
+    return users_db
+
+# Endpoint to get a single user by ID
+@app.get("/users/{user_id}", response_model=User)
+def get_user_by_id(user_id: int, current_user: dict = Depends(require_role("admin"))):
+    """
+    Get a single user by their ID.
+
+    Args:
+        user_id (int): The ID of the user to retrieve.
+        current_user (dict): The currently authenticated user, required to have the 'admin' role.
+
+    Returns:
+        User: The requested user data.
+    """
+    return get_user(user_id)
+
+# Endpoint to update a user
+@app.put("/users/{user_id}", response_model=User)
+def update_user(user_id: int, updated_user: User, current_user: dict = Depends(require_role("admin"))):
+    """
+    Update a user.
+
+    Args:
+        user_id (int): The ID of the user to update.
+        updated_user (User): The new data for the user.
+        current_user (dict): The currently authenticated user, required to have the 'admin' role.
+
+    Returns:
+        User: The updated user data.
+    """
+    user = get_user(user_id)
+    user["name"] = updated_user.name
+    user["email"] = updated_user.email
+    user["hashed_password"] = pwd_context.hash(updated_user.password)
+    user["role"] = updated_user.role
+    return user
+
+# Endpoint to delete a user (admin only)
+@app.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(user_id: int, current_user: dict = Depends(require_role("admin"))):
+    """
+    Delete a user.
+
+    Args:
+        user_id (int): The ID of the user to delete.
+        current_user (dict): The currently authenticated user, required to have the 'admin' role.
+
+    Returns:
+        None
+    """
+    global users_db
+    users_db = [user for user in users_db if user["id"] != user_id]
