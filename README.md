@@ -20,6 +20,10 @@ The new feature includes email verification to ensure that users provide valid e
 
 Role-based access control has been implemented to allow different roles of users to have different permissions within the system. Supported roles include "user", "admin", and "superuser". Only users with appropriate roles can perform certain actions, such as deleting other users or changing user roles.
 
+### Token Refresh
+
+A new `/auth/refresh` endpoint has been added to refresh JWT tokens. This allows authenticated users to obtain a new access token without having to log in again after the initial token expires. The refresh token remains valid for 7 days.
+
 ## Requirements
 
 - Python 3.7+
@@ -81,27 +85,89 @@ Send a PUT request to `/auth/update-password` with the user's email and new pass
 curl -X PUT "http://127.0.0.1:8000/auth/update-password" -H "Content-Type: application/json" -d '{"email": "john.doe@example.com", "new_password": "newsecurepassword"}'
 ```
 
-### Create a New User (Authenticated)
+### Refresh JWT Token
 
-Send a POST request to `/users/` with user data in JSON format and include the JWT token in the Authorization header.
+Send a POST request to `/auth/refresh` with the user's refresh token.
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/users/" -H "Content-Type: application/json" -H "Authorization: Bearer <jwt_token>" -d '{"name": "Jane Doe", "email": "jane.doe@example.com", "role": "user"}'
+curl -X POST "http://127.0.0.1:8000/auth/refresh" -H "Content-Type: application/json" -d '{"refresh_token": "your_refresh_token_here"}'
 ```
 
-## Project Structure
+## Endpoints
 
-```
-python-skills/
-│
-├── README.md
-├── src/
-│   ├── config.py       # Configuration settings for the API
-│   ├── main.py         # Main application logic and routes
-│   ├── models.py     # User model with hashed_password, reset_token, and role fields
-│   └── utils.py        # Utility functions including JWT handling
-└── tests/
-    └── tes
-```
+### `/auth/register`
 
---- END OF UPDATED CONTENT ---
+**Method**: POST  
+**Description**: Register a new user.  
+**Request Body**: JSON  
+```json
+{
+  "name": "John Doe",
+  "email": "john.doe@example.com",
+  "password": "securepassword",
+  "role": "user"
+}
+```
+**Response**:
+- **201 Created**: User registered successfully.
+- **400 Bad Request**: Invalid input.
+
+### `/auth/login`
+
+**Method**: POST  
+**Description**: Authenticate a user and return JWT tokens.  
+**Request Body**: JSON  
+```json
+{
+  "email": "john.doe@example.com",
+  "password": "securepassword"
+}
+```
+**Response**:
+- **200 OK**: Authentication successful.
+- **401 Unauthorized**: Invalid credentials.
+
+### `/auth/forgot-password`
+
+**Method**: POST  
+**Description**: Send a password reset email.  
+**Request Body**: JSON  
+```json
+{
+  "email": "john.doe@example.com"
+}
+```
+**Response**:
+- **200 OK**: Email sent successfully.
+- **404 Not Found**: User not found.
+
+### `/auth/update-password`
+
+**Method**: PUT  
+**Description**: Update a user's password.  
+**Request Body**: JSON  
+```json
+{
+  "email": "john.doe@example.com",
+  "new_password": "newsecurepassword"
+}
+```
+**Response**:
+- **200 OK**: Password updated successfully.
+- **401 Unauthorized**: Invalid credentials.
+
+### `/auth/refresh`
+
+**Method**: POST  
+**Description**: Refresh a JWT access token using the refresh token.  
+**Request Body**: JSON  
+```json
+{
+  "refresh_token": "your_refresh_token_here"
+}
+```
+**Response**:
+- **200 OK**: New access token.
+- **401 Unauthorized**: Invalid refresh token.
+
+These endpoints provide a comprehensive set of tools for managing user authentication and authorization within the API.
