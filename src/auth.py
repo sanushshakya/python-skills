@@ -8,7 +8,7 @@ ALGORITHM = "HS256"
 
 # Token expiration times in minutes
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 
 def generate_email_verification_token(user_id: int):
     """
@@ -98,34 +98,6 @@ def verify_email_verification_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return int(payload.get("sub"))
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Could not validate credentials",
-                            headers={"WWW-Authenticate": "Bearer"})
-
-def verify_refresh_token(token: str):
-    """
-    Verifies a JWT refresh token and returns the subject.
-    
-    Args:
-        token (str): The JWT refresh token to verify.
-        
-    Returns:
-        str: The subject of the verified token.
-    
-    Raises:
-        HTTPException: If the token is invalid or expired.
-    """
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        expiration_time = payload.get("exp")
-        if expiration_time is None:
-            raise JWTError
-        elif datetime.utcnow() > datetime.fromtimestamp(expiration_time):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail="Refresh token has expired",
-                                headers={"WWW-Authenticate": "Bearer"})
-        return payload.get("sub")
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Could not validate credentials",
