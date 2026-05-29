@@ -103,32 +103,30 @@ def verify_email_verification_token(token: str):
                             detail="Could not validate credentials",
                             headers={"WWW-Authenticate": "Bearer"})
 
-def verify_access_token(token: str):
-    """
-    Verifies an access token and returns the user ID.
-    
-    Args:
-        token (str): The access token to verify.
-        
-    Returns:
-        int: The user ID associated with the verified token.
-    
-    Raises:
-        HTTPException: If the token is invalid or expired.
-    """
-    return verify_token(token)
-
 def verify_refresh_token(token: str):
     """
-    Verifies a refresh token and returns the user ID.
+    Verifies a JWT refresh token and returns the subject.
     
     Args:
-        token (str): The refresh token to verify.
+        token (str): The JWT refresh token to verify.
         
     Returns:
-        int: The user ID associated with the verified token.
+        str: The subject of the verified token.
     
     Raises:
         HTTPException: If the token is invalid or expired.
     """
-    return verify_token(token)
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        expiration_time = payload.get("exp")
+        if expiration_time is None:
+            raise JWTError
+        elif datetime.utcnow() > datetime.fromtimestamp(expiration_time):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="Refresh token has expired",
+                                headers={"WWW-Authenticate": "Bearer"})
+        return payload.get("sub")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Could not validate credentials",
+                            headers={"WWW-Authenticate": "Bearer"})
