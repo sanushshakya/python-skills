@@ -102,3 +102,93 @@ def verify_email_verification_token(token: str):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Could not validate credentials",
                             headers={"WWW-Authenticate": "Bearer"})
+
+def trigger_login_notification(user_id: int):
+    """
+    Triggers a login notification for the given user ID.
+    
+    Args:
+        user_id (int): The ID of the user logging in.
+        
+    Returns:
+        None
+    """
+    # Logic to trigger a notification
+    print(f"Notification triggered for user {user_id} logging in from a new device.")
+
+def trigger_password_change_notification(user_id: int):
+    """
+    Triggers a password change notification for the given user ID.
+    
+    Args:
+        user_id (int): The ID of the user changing their password.
+        
+    Returns:
+        None
+    """
+    # Logic to trigger a notification
+    print(f"Notification triggered for user {user_id} changing their password.")
+
+# Update the login route to include notification triggering
+def login(user: User, db: Session = Depends(get_db)):
+    """
+    Authenticates a user and returns JWT tokens.
+    
+    Args:
+        user (User): The user credentials provided during login.
+        db (Session): Database session dependency.
+        
+    Returns:
+        dict: A dictionary containing access token, refresh token, and token type.
+    
+    Raises:
+        HTTPException: If the user does not exist or the password is incorrect.
+    """
+    user_db = db.query(User).filter(User.email == user.email).first()
+    if not user_db or not verify_password(user.password, user_db.password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Incorrect email or password",
+                            headers={"WWW-Authenticate": "Bearer"})
+    
+    # Trigger login notification
+    trigger_login_notification(user_db.id)
+    
+    access_token = generate_access_token(str(user_db.id))
+    refresh_token = generate_refresh_token(str(user_db.id))
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+# Update the change_password route to include notification triggering
+def change_password(user_id: int, new_password: str, current_password: str, db: Session = Depends(get_db)):
+    """
+    Changes a user's password.
+    
+    Args:
+        user_id (int): The ID of the user changing their password.
+        new_password (str): The new password for the user.
+        current_password (str): The current password of the user.
+        db (Session): Database session dependency.
+        
+    Returns:
+        dict: A dictionary indicating success or failure.
+    
+    Raises:
+        HTTPException: If the user does not exist, the current password is incorrect, or the new password is too short.
+    """
+    user_db = db.query(User).filter(User.id == user_id).first()
+    if not user_db or not verify_password(current_password, user_db.password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Incorrect current password",
+                            headers={"WWW-Authenticate": "Bearer"})
+    
+    # Check password length
+    if len(new_password) < 8:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="Password must be at least 8 characters long")
+    
+    user_db.password = get_password_hash(new_password)
+    db.commit()
+    
+    # Trigger password change notification
+    trigger_password_change_notification(user_id)
+    
+    return {"detail": "Password changed successfully"}
