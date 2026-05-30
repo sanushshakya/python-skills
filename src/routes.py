@@ -1,64 +1,81 @@
-"""
-routes.py
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+import re
 
-This file contains the route definitions for the User Management API.
-"""
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from starlette.responses import JSONResponse
-import datetime
-
-from src.auth import verify_token
-from src.database import get_db
-from src.models import AuditLog, UserActivitySummary
-from src.schemas import ActivitySummarizationRequest, SummaryOutput
-from src.summarizer import generate_summary
-
+# Initialize router
 router = APIRouter()
 
-@router.post("/ai/summarize-user-activity", response_model=SummaryOutput, status_code=status.HTTP_201_CREATED)
-def summarize_user_activity(request: ActivitySummarizationRequest, db: Session = Depends(get_db), token: str = Depends(verify_token)):
+# Define a Pydantic model for the query input
+class QueryInput(BaseModel):
     """
-    Endpoint to generate natural language summaries of user actions from the AuditLog.
+    Model to validate and store the natural language query.
     
     Args:
-        request (ActivitySummarizationRequest): The request containing user ID and time range for activity.
-        db (Session): Database session dependency.
-        token (str, optional): JWT token for authentication. Defaults to Depends(verify_token).
-        
+        query (str): The user's input query.
+    """
+    query: str
+
+# Define a Pydantic model for the output filter
+class FilterOutput(BaseModel):
+    """
+    Model to represent the SQL filter generated from the query.
+    
+    Args:
+        filter_string (str): The SQL-like filter string.
+    """
+    filter_string: str
+
+# Sample mapping of keywords to SQL filter conditions
+KEYWORD_MAP = {
+    "age": "user_age",
+    "name": "user_name",
+    "email": "user_email"
+}
+
+def natural_language_to_sql_filter(query: str) -> str:
+    """
+    Translates a natural language query into a SQL-like filter string.
+    
+    Args:
+        query (str): The user's input query.
+    
     Returns:
-        SummaryOutput: The generated summary of the user's activities.
+        str: The generated SQL-like filter string.
+    """
+    # Tokenize the query
+    tokens = re.findall(r'\b\w+\b', query)
+    conditions = []
+    
+    for token in tokens:
+        if token.lower() in KEYWORD_MAP:
+            keyword = KEYWORD_MAP[token.lower()]
+            conditions.append(f"{keyword} LIKE '%{token}%'")
+    
+    return " AND ".join(conditions)
+
+# Define the smart-search endpoint
+@router.post("/ai/smart-search", response_model=FilterOutput)
+def smart_search(query_input: QueryInput, q: str = Depends(lambda: query_input.query)):
+    """
+    Endpoint to translate natural language queries into database filters.
+    
+    Args:
+        query_input (QueryInput): The input containing the natural language query.
+    
+    Returns:
+        FilterOutput: The generated SQL-like filter string.
     
     Raises:
-        HTTPException 404: If no audit logs are found for the given user ID and time range.
+        HTTPException: If the query is empty or invalid.
     """
-    start_time = request.start_time
-    end_time = request.end_time
-    user_id = request.user_id
-
-    # Query the database for activity logs within the specified time range
-    activity_logs = db.query(AuditLog).filter(
-        AuditLog.user_id == user_id,
-        AuditLog.timestamp >= start_time,
-        AuditLog.timestamp <= end_time
-    ).all()
-
-    if not activity_logs:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No activity logs found for the given time range.")
-
-    # Generate a summary of the activity logs
-    summary = generate_summary([log.activity for log in activity_logs])
-
-    # Create a UserActivitySummary instance and save it to the database
-    new_summary = UserActivitySummary(
-        user_id=user_id,
-        start_time=start_time,
-        end_time=end_time,
-        summary=summary
-    )
-    db.add(new_summary)
-    db.commit()
-    db.refresh(new_summary)
-
-    return JSONResponse(content={"message": "User activity summary generated successfully", "summary": new_summary.summary}, status_code=status.HTTP_201_CREATED)
+    # Validate the query
+    if not q.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Query cannot be empty"
+        )
+    
+    # Generate the SQL filter
+    sql_filter = natural_language_to_sql_filter(q)
+    
+    return FilterOutput(filter_string=sql_filter)
