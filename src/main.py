@@ -87,6 +87,18 @@ def require_role(required_role: str):
     """
     def inner_dependency(current_user: dict = Depends(get_current_user)):
         if current_user["role"] != required_role:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
         return current_user
-    return inner_depend
+    return inner_dependency
+
+# Import new routes and configure the application to use them
+from src import chat_routes, summarization_routes, smart_search_routes
+
+app.include_router(chat_routes.router)
+app.include_router(summarization_routes.router)
+app.include_router(smart_search_routes.router)
+
+# Main entry point for running the API
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
