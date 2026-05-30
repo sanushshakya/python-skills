@@ -1,0 +1,115 @@
+"""
+Module for managing user authentication using JWT tokens.
+"""
+
+from fastapi import Depends, HTTPException, status
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
+
+# Secret key used to encode and decode JWTs
+SECRET_KEY = "your_secret_key_here"
+ALGORITHM = "HS256"
+
+# Token expiration times in minutes
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
+
+def generate_access_token(data: dict, expires_delta: timedelta | None = None):
+    """
+    Generates a JWT access token.
+
+    Args:
+        data (dict): Data to be encoded in the token.
+        expires_delta (timedelta, optional): Time until the token expires. Defaults to None.
+
+    Returns:
+        str: Encoded JWT token.
+    """
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def generate_refresh_token(user_id: int):
+    """
+    Generates a JWT refresh token.
+
+    Args:
+        user_id (int): ID of the user for whom the token is generated.
+
+    Returns:
+        str: Encoded JWT refresh token.
+    """
+    payload = {"user_id": user_id}
+    expire = datetime.utcnow() + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
+    payload.update({"exp": expire})
+    encoded_jwt = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_access_token(token: str, credentials_exception: HTTPException):
+    """
+    Verifies the JWT access token.
+
+    Args:
+        token (str): JWT access token to be verified.
+        credentials_exception (HTTPException): Exception to raise if verification fails.
+
+    Returns:
+        dict: Decoded payload of the JWT token.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("user_id")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+def verify_refresh_token(token: str, credentials_exception: HTTPException):
+    """
+    Verifies the JWT refresh token.
+
+    Args:
+        token (str): JWT refresh token to be verified.
+        credentials_exception (HTTPException): Exception to raise if verification fails.
+
+    Returns:
+        dict: Decoded payload of the JWT token.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("user_id")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+def get_current_user(token: str = Depends(verify_access_token)):
+    """
+    Dependency to retrieve the current authenticated user.
+
+    Args:
+        token (str, optional): JWT access token. Defaults to Depends(verify_access_token).
+
+    Returns:
+        dict: Current authenticated user.
+    """
+    return {"user_id": 1}  # Placeholder for actual implementation
+
+def get_current_active_user(current_user: dict = Depends(get_current_user)):
+    """
+    Dependency to retrieve the current active user.
+
+    Args:
+        current_user (dict, optional): Current authenticated user. Defaults to Depends(get_current_user).
+
+    Returns:
+        dict: Current active user.
+    """
+    if current_user["user_id"] != 1:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+    return current_user
