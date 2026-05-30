@@ -6,6 +6,7 @@ from src.models import User, UserProfile
 from src.schemas import UserProfileUpdateSchema, UserProfilePictureUploadSchema
 from src.auth import JWTBearer, get_current_user
 from src.utils import save_file_to_disk
+import requests
 
 router = APIRouter()
 
@@ -71,3 +72,42 @@ async def update_user_profile_picture(
     db.refresh(current_user)
 
     return current_user.profile
+
+@router.post("/ai/chat", response_model=str)
+async def chat_with_ai(message: str, user: User = Depends(get_current_user)):
+    """
+    Interact with AI for chat.
+
+    Args:
+        message (str): The user's input message.
+        user (User): The authenticated user making the request.
+
+    Returns:
+        str: AI-generated response to the user's message.
+    """
+    # Ollama API endpoint
+    ollama_url = "https://api.ollama.com/chat"
+    
+    # Headers for the API request
+    headers = {
+        "Authorization": f"Bearer {user.api_token}",  # Assuming the user has an API token
+        "Content-Type": "application/json",
+    }
+    
+    # Payload for the API request
+    payload = {
+        "message": message,
+        "user_id": user.id,
+    }
+    
+    try:
+        # Make a POST request to the Ollama API
+        response = requests.post(ollama_url, headers=headers, json=payload)
+        
+        # Raise an exception if the request was unsuccessful
+        response.raise_for_status()
+        
+        # Return the AI-generated response
+        return response.json()["message"]
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
