@@ -24,6 +24,86 @@ Role-based access control has been implemented to allow different roles of users
 
 A new `/auth/refresh` endpoint has been added to refresh JWT tokens. This allows authenticated users to obtain a new access token without having to log in again after the initial token expires. The refresh token remains valid for 7 days.
 
+## User Profile Fields
+
+The user profile now includes additional fields:
+- **Bio**: A brief description of the user.
+- **Profile Picture**: A link to the user's profile picture.
+- **Date of Birth**: The user's date of birth.
+- **Gender**: The user's gender (optional).
+
+### New Endpoints
+
+#### GET /users/me
+
+Retrieves the current authenticated user's details.
+
+**Response Schema:**
+```json
+{
+  "id": int,
+  "name": str,
+  "email": str,
+  "role": str,
+  "bio": str,
+  "profile_picture": str,
+  "date_of_birth": str,
+  "gender": str,
+  "created_at": str,
+  "updated_at": str
+}
+```
+
+#### PUT /users/me
+
+Updates the current authenticated user's details.
+
+**Request Body Schema:**
+```json
+{
+  "name": str,
+  "bio": str,
+  "profile_picture": str,
+  "date_of_birth": str,
+  "gender": str
+}
+```
+
+**Response Schema:**
+```json
+{
+  "id": int,
+  "name": str,
+  "email": str,
+  "role": str,
+  "bio": str,
+  "profile_picture": str,
+  "date_of_birth": str,
+  "gender": str,
+  "created_at": str,
+  "updated_at": str
+}
+```
+
+#### File Upload Support
+
+A new endpoint `/users/upload-avatar` has been added to allow users to upload and update their profile picture.
+
+**Request Body Schema:**
+```json
+{
+  "file": file
+}
+```
+
+**Response Schema:**
+```json
+{
+  "message": str,
+  "profile_picture_url": str
+}
+```
+
 ## Requirements
 
 - Python 3.7+
@@ -58,7 +138,7 @@ A new `/auth/refresh` endpoint has been added to refresh JWT tokens. This allows
 Send a POST request to `/auth/register` with user data in JSON format.
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/auth/register" -H "Content-Type: application/json" -d '{"name": "John Doe", "email": "john.doe@example.com", "password": "securepassword", "role": "user"}'
+curl -X POST "http://127.0.0.1:8000/auth/register" -H "Content-Type: application/json" -d '{"name": "John Doe", "email": "john.doe@example.com", "password": "securepassword", "role": "user", "bio": "Software developer", "profile_picture": "https://example.com/profile.jpg", "date_of_birth": "1990-05-28", "gender": "Male"}'
 ```
 
 ### Login and Get JWT Token
@@ -79,95 +159,34 @@ curl -X POST "http://127.0.0.1:8000/auth/forgot-password" -H "Content-Type: appl
 
 ### Update Password
 
-Send a PUT request to `/auth/update-password` with the user's email and new password.
+Send a PUT request to `/auth/update-password` with the user's current password and new password.
 
 ```bash
-curl -X PUT "http://127.0.0.1:8000/auth/update-password" -H "Content-Type: application/json" -d '{"email": "john.doe@example.com", "new_password": "newsecurepassword"}'
+curl -X PUT "http://127.0.0.1:8000/auth/update-password" -H "Content-Type: application/json" -d '{"current_password": "securepassword", "new_password": "new_securepassword"}'
 ```
 
-### Refresh JWT Token
+### Get Current User
 
-Send a POST request to `/auth/refresh` with the user's refresh token.
+Send a GET request to `/users/me` with an access token.
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/auth/refresh" -H "Content-Type: application/json" -d '{"refresh_token": "your_refresh_token_here"}'
+curl -X GET "http://127.0.0.1:8000/users/me" -H "Authorization: Bearer your_access_token"
 ```
 
-## Endpoints
+### Update Current User
 
-### `/auth/register`
+Send a PUT request to `/users/me` with updated user data and an access token.
 
-**Method**: POST  
-**Description**: Register a new user.  
-**Request Body**: JSON  
-```json
-{
-  "name": "John Doe",
-  "email": "john.doe@example.com",
-  "password": "securepassword",
-  "role": "user"
-}
+```bash
+curl -X PUT "http://127.0.0.1:8000/users/me" -H "Content-Type: application/json" -d '{"name": "John Doe", "bio": "Updated bio"}' -H "Authorization: Bearer your_access_token"
 ```
-**Response**:
-- **201 Created**: User registered successfully.
-- **400 Bad Request**: Invalid input.
 
-### `/auth/login`
+### Upload Profile Picture
 
-**Method**: POST  
-**Description**: Authenticate a user and return JWT tokens.  
-**Request Body**: JSON  
-```json
-{
-  "email": "john.doe@example.com",
-  "password": "securepassword"
-}
+Send a PUT request to `/users/upload-avatar` with the profile picture file and an access token.
+
+```bash
+curl -X PUT "http://127.0.0.1:8000/users/upload-avatar" -F "file=@path/to/profile.jpg" -H "Authorization: Bearer your_access_token"
 ```
-**Response**:
-- **200 OK**: Authentication successful.
-- **401 Unauthorized**: Invalid credentials.
 
-### `/auth/forgot-password`
-
-**Method**: POST  
-**Description**: Send a password reset email.  
-**Request Body**: JSON  
-```json
-{
-  "email": "john.doe@example.com"
-}
-```
-**Response**:
-- **200 OK**: Email sent successfully.
-- **404 Not Found**: User not found.
-
-### `/auth/update-password`
-
-**Method**: PUT  
-**Description**: Update a user's password.  
-**Request Body**: JSON  
-```json
-{
-  "email": "john.doe@example.com",
-  "new_password": "newsecurepassword"
-}
-```
-**Response**:
-- **200 OK**: Password updated successfully.
-- **401 Unauthorized**: Invalid credentials.
-
-### `/auth/refresh`
-
-**Method**: POST  
-**Description**: Refresh a JWT access token using the refresh token.  
-**Request Body**: JSON  
-```json
-{
-  "refresh_token": "your_refresh_token_here"
-}
-```
-**Response**:
-- **200 OK**: New access token.
-- **401 Unauthorized**: Invalid refresh token.
-
-These endpoints provide a comprehensive set of tools for managing user authentication and authorization within the API.
+These updates provide a more robust user management system with additional features and endpoints.
