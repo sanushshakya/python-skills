@@ -1,113 +1,64 @@
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
-from sqlalchemy.orm import Session
+"""
+routes.py
 
+This file contains the route definitions for the User Management API.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from starlette.responses import JSONResponse
+import datetime
+
+from src.auth import verify_token
 from src.database import get_db
-from src.models import User, UserProfile
-from src.schemas import UserProfileUpdateSchema, UserProfilePictureUploadSchema
-from src.auth import JWTBearer, get_current_user
-from src.utils import save_file_to_disk
-import requests
+from src.models import AuditLog, UserActivitySummary
+from src.schemas import ActivitySummarizationRequest, SummaryOutput
+from src.summarizer import generate_summary
 
 router = APIRouter()
 
-@router.put("/users/me", response_model=UserProfile)
-async def update_user_profile(
-    user_profile: UserProfileUpdateSchema,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+@router.post("/ai/summarize-user-activity", response_model=SummaryOutput, status_code=status.HTTP_201_CREATED)
+def summarize_user_activity(request: ActivitySummarizationRequest, db: Session = Depends(get_db), token: str = Depends(verify_token)):
     """
-    Update the current user's profile.
-
+    Endpoint to generate natural language summaries of user actions from the AuditLog.
+    
     Args:
-        user_profile (UserProfileUpdateSchema): Updated user profile data.
-        current_user (User): The authenticated user making the request.
+        request (ActivitySummarizationRequest): The request containing user ID and time range for activity.
         db (Session): Database session dependency.
-
-    Returns:
-        UserProfile: The updated user profile.
-    """
-    # Fetch the user from the database
-    user = db.query(User).filter(User.id == current_user.id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    # Update user profile attributes
-    for field in user_profile.dict(exclude_unset=True):
-        setattr(user.profile, field, getattr(user_profile, field))
-
-    # Commit the changes to the database
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    return user.profile
-
-@router.put("/users/me/picture", response_model=UserProfile)
-async def update_user_profile_picture(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """
-    Update the current user's profile picture.
-
-    Args:
-        file (UploadFile): The uploaded image file.
-        current_user (User): The authenticated user making the request.
-        db (Session): Database session dependency.
-
-    Returns:
-        UserProfile: The updated user profile with the new picture URL.
-    """
-    # Save the file to disk and get the file path
-    file_path = save_file_to_disk(file)
-    
-    # Update the user's profile picture URL
-    current_user.profile.picture_url = file_path
-
-    # Commit the changes to the database
-    db.add(current_user)
-    db.commit()
-    db.refresh(current_user)
-
-    return current_user.profile
-
-@router.post("/ai/chat", response_model=str)
-async def chat_with_ai(message: str, user: User = Depends(get_current_user)):
-    """
-    Interact with AI for chat.
-
-    Args:
-        message (str): The user's input message.
-        user (User): The authenticated user making the request.
-
-    Returns:
-        str: AI-generated response to the user's message.
-    """
-    # Ollama API endpoint
-    ollama_url = "https://api.ollama.com/chat"
-    
-    # Headers for the API request
-    headers = {
-        "Authorization": f"Bearer {user.api_token}",  # Assuming the user has an API token
-        "Content-Type": "application/json",
-    }
-    
-    # Payload for the API request
-    payload = {
-        "message": message,
-        "user_id": user.id,
-    }
-    
-    try:
-        # Make a POST request to the Ollama API
-        response = requests.post(ollama_url, headers=headers, json=payload)
+        token (str, optional): JWT token for authentication. Defaults to Depends(verify_token).
         
-        # Raise an exception if the request was unsuccessful
-        response.raise_for_status()
-        
-        # Return the AI-generated response
-        return response.json()["message"]
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    Returns:
+        SummaryOutput: The generated summary of the user's activities.
+    
+    Raises:
+        HTTPException 404: If no audit logs are found for the given user ID and time range.
+    """
+    start_time = request.start_time
+    end_time = request.end_time
+    user_id = request.user_id
+
+    # Query the database for activity logs within the specified time range
+    activity_logs = db.query(AuditLog).filter(
+        AuditLog.user_id == user_id,
+        AuditLog.timestamp >= start_time,
+        AuditLog.timestamp <= end_time
+    ).all()
+
+    if not activity_logs:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No activity logs found for the given time range.")
+
+    # Generate a summary of the activity logs
+    summary = generate_summary([log.activity for log in activity_logs])
+
+    # Create a UserActivitySummary instance and save it to the database
+    new_summary = UserActivitySummary(
+        user_id=user_id,
+        start_time=start_time,
+        end_time=end_time,
+        summary=summary
+    )
+    db.add(new_summary)
+    db.commit()
+    db.refresh(new_summary)
+
+    return JSONResponse(content={"message": "User activity summary generated successfully", "summary": new_summary.summary}, status_code=status.HTTP_201_CREATED)
