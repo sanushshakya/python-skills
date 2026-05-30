@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from pydantic import BaseModel
 import re
+from src.auth import verify_token
 
 # Initialize router
 router = APIRouter()
@@ -79,3 +80,27 @@ def smart_search(query_input: QueryInput, q: str = Depends(lambda: query_input.q
     sql_filter = natural_language_to_sql_filter(q)
     
     return FilterOutput(filter_string=sql_filter)
+
+# WebSocket endpoint for real-time notifications
+@router.websocket("/ws/notifications/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: int):
+    """
+    WebSocket endpoint to send real-time notifications to a specific user.
+    
+    Args:
+        websocket (WebSocket): The WebSocket connection object.
+        user_id (int): The ID of the user to receive notifications.
+    """
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "close":
+                await websocket.close()
+                break
+            # Logic to send notifications based on user_id
+            # For example, you can fetch new messages for the user and send them here
+            notification = f"New message for user {user_id}: {data}"
+            await websocket.send_text(notification)
+    except WebSocketDisconnect:
+        print(f"User {user_id} disconnected")
