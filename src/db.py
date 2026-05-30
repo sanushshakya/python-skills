@@ -1,5 +1,3 @@
-# src/db.py
-
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
@@ -30,6 +28,17 @@ class UserProfile(Base):
     updated_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="profile")
+
+class AIAssistant(Base):
+    __tablename__ = "ai_assistants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=False, index=True)
+    assistant_name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="ai_assistants")
 
 # Database connection setup
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
