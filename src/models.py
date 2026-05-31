@@ -1,25 +1,26 @@
-"""Module containing the Notification model."""
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship
+from src.database import Base
 
-from sqlalchemy import Column, Integer, String, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
-
-class Notification(Base):
+class Organisation(Base):
     """
-    Represents a notification in the database.
-    
+    Represents an organisation in the system.
+
     Attributes:
-        id (int): The primary key of the notification.
-        user_id (int): The ID of the user receiving the notification.
-        message (str): The content of the notification.
-        created_at (datetime): The timestamp when the notification was created.
+        id (int): Unique identifier for the organisation.
+        name (str): Name of the organisation.
+        description (str): Description of the organisation.
+        users (list[User]): List of users belonging to this organisation.
     """
-    __tablename__ = "notifications"
+
+    __tablename__ = "organisations"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True)
-    message = Column(String, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    name = Column(String, unique=True, index=True)
+    description = Column(String)
 
-# Inline comments are used to explain each field in the model
+    # Relationship to associated users
+    users = relationship("User", back_populates="organisation")
+```
+
+This file defines the `Organisation` model for SQLAlchemy ORM. The `__tablename__` attribute specifies the table name in the database. The `id`, `name`, and `description` fields are defined as columns with appropriate types. The `users` field establishes a one-to-many relationship with the `User` model, allowing us to access all users associated with an organisation through this model.
