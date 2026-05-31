@@ -21,6 +21,27 @@ class Organisation(Base):
 
     # Relationship to associated users
     users = relationship("User", back_populates="organisation")
-```
 
-This file defines the `Organisation` model for SQLAlchemy ORM. The `__tablename__` attribute specifies the table name in the database. The `id`, `name`, and `description` fields are defined as columns with appropriate types. The `users` field establishes a one-to-many relationship with the `User` model, allowing us to access all users associated with an organisation through this model.
+class User(Base):
+    """
+    Represents a user in the system.
+
+    Attributes:
+        id (int): Unique identifier for the user.
+        name (str): Name of the user.
+        email (str): Email address of the user.
+        role (str): Role of the user (e.g., 'admin', 'user').
+        organisation_id (int): ID of the organisation this user belongs to.
+        organisation (Organisation): The organisation this user belongs to.
+    """
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    role = Column(String)
+    organisation_id = Column(Integer, ForeignKey("organisations.id"), nullable=False)
+
+    # Relationship to the associated organisation
+    organisation = relationship("Organisation", back_populates="users")
