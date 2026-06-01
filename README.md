@@ -52,6 +52,29 @@ The following events can trigger notifications:
 - **Login Success**: When a user successfully logs in.
 - **Logout**: When a user logs out.
 
+## Background Tasks
+
+This project also leverages Celery and Redis for handling background tasks, such as sending email notifications. Celery acts as the task queue, while Redis serves as the message broker and cache.
+
+### Celery Configuration
+
+Celery is configured to use Redis as the broker and backend. You can start a Celery worker by running:
+
+```bash
+celery -A src.tasks worker --loglevel=info
+```
+
+### Email Notification Task
+
+An email notification task has been added to send verification emails after user registration. This task runs asynchronously using Celery.
+
+**Example Usage:**
+```python
+from src.tasks import send_verification_email
+
+send_verification_email.delay(user_id, verification_token)
+```
+
 ## User Profile Fields
 
 The user profile now includes additional fields:
@@ -79,99 +102,3 @@ Retrieves the current authenticated user's details.
   "gender": str
 }
 ```
-
-### Organization Management
-
-New endpoints have been added to manage organizations:
-
-#### GET /orgs
-
-Retrieves a list of all organizations.
-
-**Response Schema:**
-```json
-[
-  {
-    "id": int,
-    "name": str,
-    "description": str
-  }
-]
-```
-
-#### POST /orgs
-
-Creates a new organization.
-
-**Request Body:**
-```json
-{
-  "name": str,
-  "description": str
-}
-```
-
-**Response Schema:**
-```json
-{
-  "id": int,
-  "name": str,
-  "description": str
-}
-```
-
-#### GET /orgs/{org_id}
-
-Retrieves details of a specific organization.
-
-**Path Parameter:**
-- `org_id`: int
-
-**Response Schema:**
-```json
-{
-  "id": int,
-  "name": str,
-  "description": str
-}
-```
-
-#### PUT /orgs/{org_id}
-
-Updates details of a specific organization.
-
-**Path Parameter:**
-- `org_id`: int
-
-**Request Body:**
-```json
-{
-  "name": str,
-  "description": str
-}
-```
-
-**Response Schema:**
-```json
-{
-  "id": int,
-  "name": str,
-  "description": str
-}
-```
-
-#### DELETE /orgs/{org_id}
-
-Deletes a specific organization.
-
-**Path Parameter:**
-- `org_id`: int
-
-### OWNER Role
-
-The new OWNER role has been added to provide extended permissions for managing organizations:
-
-- Users with the OWNER role can create, update, and delete organizations.
-- Users with the OWNER role can also assign other users to organizations.
-
-These updates will help you manage your user data more effectively and securely.
