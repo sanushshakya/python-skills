@@ -1,46 +1,49 @@
-from celery import Celery
+"""
+src/tasks.py
+This file contains Celery tasks for handling background operations in the User Management API.
+"""
+
+from celery import shared_task
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from src.config import get_settings
 
-# Initialize Celery app with Redis as the broker and result backend
-celery_app = Celery(
-    __name__,
-    broker=get_settings().CELERY_BROKER_URL,
-    backend=get_settings().CELERY_RESULT_BACKEND,
-)
-
-# Function to send an email
-def send_email(subject: str, recipient: str, body: str):
-    settings = get_settings()
-    sender = settings.EMAIL_SENDER
-    password = settings.EMAIL_PASSWORD
-
-    msg = MIMEMultipart()
-    msg['From'] = sender
-    msg['To'] = recipient
-    msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'plain'))
-
-    server = smtplib.SMTP(settings.EMAIL_SERVER, settings.EMAIL_PORT)
-    server.starttls()
-    server.login(sender, password)
-    text = msg.as_string()
-    server.sendmail(sender, recipient, text)
-    server.quit()
-
-# Celery task to send a welcome email
-@celery_app.task(name="send_welcome_email")
-def send_welcome_email(user_email: str):
+@shared_task
+def send_password_reset_email(user_email, reset_token):
     """
-    Sends a welcome email to the user.
-    
+    Send a password reset email to the user.
+
     Args:
-        user_email (str): The email address of the user to receive the welcome email.
+        user_email (str): The email address of the user.
+        reset_token (str): The token used for resetting the password.
     """
-    subject = "Welcome to Our Service!"
-    body = f"Hello! Thank you for registering with us. We are excited to have you on board."
-    
-    # Call the send_email function to send the email
-    send_email(subject, user_email, body)
+
+    # Email credentials and server details
+    sender_email = "your_email@example.com"
+    receiver_email = user_email
+    password = "your_email_password"
+
+    # Create the container email message.
+    message = MIMEMultipart()
+    message["From"] = sender_email
+    message["To"] = receiver_email
+    message["Subject"] = "Password Reset Request"
+
+    # Email body content
+    reset_url = f"http://localhost:8000/reset-password?token={reset_token}"
+    body = f"Hello, to reset your password, please visit the following link:\n{reset_url}"
+
+    # Attach the email body with the MIMEText object
+    message.attach(MIMEText(body, "plain"))
+
+    try:
+        # Connect to the SMTP server and send the email
+        server = smtplib.SMTP('smtp.example.com', 587)
+        server.starttls()
+        server.login(sender_email, password)
+        text = message.as_string()
+        server.sendmail(sender_email, receiver_email, text)
+        server.quit()
+
+    except Exception as e:
+        raise Exception(f"Failed to send email: {e}")
