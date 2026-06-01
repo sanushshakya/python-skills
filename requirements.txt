@@ -15,3 +15,9 @@ sqlalchemy==1.4.36
 
 # Alembic for database migrations (if you plan to use a database later)
 alembic==1.7.4
+
+# Celery for background tasks
+celery==5.2.3
+
+# Redis for message broker and caching
+redis==4.0.3
