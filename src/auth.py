@@ -14,6 +14,24 @@ REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 app = Celery('tasks', broker='redis://localhost:6379/0')
 
 @app.task(bind=True, ignore_result=True)
+def send_password_reset_email(self, user_id: int):
+    """
+    Background task to send a password reset email.
+    
+    Args:
+        user_id (int): The ID of the user to reset the password for.
+        
+    Raises:
+        HTTPException: If there is an issue sending the email.
+    """
+    try:
+        # Logic to send email
+        pass
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Error sending password reset email: {str(e)}")
+
+@app.task(bind=True, ignore_result=True)
 def send_email_verification_email(self, user_id: int):
     """
     Background task to send an email verification email.
@@ -101,24 +119,4 @@ def verify_token(token: str):
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Could not validate credentials",
-                            headers={"WWW-Authenticate": "Bearer"})
-
-def verify_email_verification_token(token: str):
-    """
-    Verifies an email verification token and returns the user ID.
-    
-    Args:
-        token (str): The email verification token to verify.
-        
-    Returns:
-        int: The user ID associated with the verified token.
-    
-    Raises:
-        HTTPException: If the token is invalid or expired.
-    """
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return int(payload.get("sub"))
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Could not validate credential
+                            headers={"WWW-Authenticate": "Bearer"}
