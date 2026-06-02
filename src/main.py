@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException, Depends, Security, status
+from fastapi import FastAPI, HTTPException, Depends, Security, status, Request
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 import uuid
 import logging
+from prometheus_client import start_http_server, Counter, Gauge
 
 # Initialize FastAPI app
 app = FastAPI(title="User Management API", description="A simple CRUD API for managing users.")
@@ -21,6 +22,24 @@ async def add_correlation_id(request, call_next):
     request.state.correlation_id = correlation_id
     logger = logging.getLogger(f"user_management.{correlation_id}")
     response = await call_next(request)
+    return response
+
+# Prometheus metrics setup
+REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests')
+REQUEST_LATENCY = Gauge('http_request_latency_seconds', 'HTTP request latency in seconds')
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    REQUEST_COUNT.labels(status=exc.status_code).inc()
+    return await exc.state.http_exception_handler(request, exc)
+
+@app.middleware("http")
+async def add_process_time_header(request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    REQUEST_COUNT.labels(status=response.status_code).inc()
+    REQUEST_LATENCY.set(process_time)
     return response
 
 # User model with additional profile fields and role is_verified fields
@@ -83,15 +102,16 @@ def get_current_user(token: str = Security(oauth2_scheme)):
     user = get_user_by_email(email=email)
     if user is None:
         raise credentials_exception
-    return user
 
-# Dependency to require a specific role for routes
-def require_role(required_role: str):
-    """
-    Dependency to check if the current user has the required role.
+# Prometheus metrics endpoint
+@app.get("/metrics", include_in_schema=False)
+async def prometheus_metrics():
+    return Response(content=start_http_server(8001), media_type="text/plain")
 
-    Args:
-        required_role (str): The role required for accessing the route.
+# Start Prometheus HTTP server in a background task
+start_http_server(8001)
 
-    Returns:
-        dict: The user data of the currently authenticated user if they have the requir
+# Main function to run the app
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
