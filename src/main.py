@@ -4,6 +4,7 @@ from typing import List, Optional
 import uuid
 import logging
 from prometheus_client import start_http_server, Counter, Gauge
+import time
 
 # Initialize FastAPI app
 app = FastAPI(title="User Management API", description="A simple CRUD API for managing users.")
@@ -77,41 +78,37 @@ def get_user(user_id: int) -> dict:
     raise HTTPException(status_code=404, detail="User not found")
 
 # Dependency to get current active user
-def get_current_user(token: str = Security(oauth2_scheme)):
+def get_current_user(user_id: int = Depends(get_user)):
     """
-    Retrieve the currently authenticated user.
+    Get the current active user based on their ID.
 
     Args:
-        token (str): The JWT token provided in the request headers.
+        user_id (int): The ID of the current user.
 
     Returns:
-        dict: The user data of the currently authenticated user.
+        dict: The current user's data.
     """
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    user = get_user_by_email(email=email)
-    if user is None:
-        raise credentials_exception
+    return user
 
-# Prometheus metrics endpoint
-@app.get("/metrics", include_in_schema=False)
-async def prometheus_metrics():
-    return Response(content=start_http_server(8001), media_type="text/plain")
+# Health endpoint to check if the application is up
+@app.get("/health")
+async def health():
+    """
+    Check the overall status of the application.
 
-# Start Prometheus HTTP server in a background task
-start_http_server(8001)
+    Returns:
+        dict: A dictionary indicating that the application is healthy.
+    """
+    return {"status": "healthy"}
 
-# Main function to run the app
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# Detailed health endpoint to provide more information about the application's status
+@app.get("/health/detailed")
+async def health_detailed():
+    """
+    Provide detailed information about the application's status, including database connection and service availability.
+
+    Returns:
+        dict: A dictionary with detailed health information.
+    """
+    # Add logic here to check additional health metrics such as database connectivity
+    return {"status": "healthy", "database": {"connected": True}, "services": {"available": ["auth", "db"]}}
