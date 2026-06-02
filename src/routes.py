@@ -99,65 +99,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
                 await websocket.close()
                 break
             # Logic to send notifications based on user_id
-            # For example, you can fetch new messages for the user
+            # For example, you can use Celery to asynchronously send messages
 
-# Define a Pydantic model for inviting users
-class InviteInput(BaseModel):
+# GraphQL endpoint
+@router.get("/graphql", include_in_schema=False)
+async def graphql_endpoint(request):
     """
-    Model to validate and store the invite data.
+    Endpoint to expose the GraphQL schema.
     
     Args:
-        email (str): The email of the user to be invited.
-        role (str): The role of the user in the organization (e.g., OWNER, MEMBER).
-    """
-    email: str
-    role: str
-
-# Define a Pydantic model for inviting users
-class InviteOutput(BaseModel):
-    """
-    Model to represent the invite output.
-    
-    Args:
-        message (str): A success or error message.
-    """
-    message: str
-
-# Define an endpoint to invite users to an organization
-@router.post("/orgs/invite", response_model=InviteOutput)
-def invite_user(email_input: InviteInput):
-    """
-    Endpoint to invite a user to an organization.
-    
-    Args:
-        email_input (InviteInput): The input containing the email and role of the user.
+        request: The incoming HTTP request object.
     
     Returns:
-        InviteOutput: A message indicating success or failure.
-    
-    Raises:
-        HTTPException: If the email is invalid or the role is not valid.
+        JSON response containing the GraphQL schema.
     """
-    # Validate the email
-    if "@" not in email_input.email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid email address"
-        )
-    
-    # Validate the role
-    if email_input.role not in ["OWNER", "MEMBER"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid role. Must be OWNER or MEMBER."
-        )
-    
-    # Generate a verification token for email
-    verification_token = generate_email_verification_token(email_input.email)
-    
-    # Send the verification token to the user's email
-    # This would typically involve an email service like SMTP
-    # For simplicity, we'll just print it here
-    print(f"Verification token sent to {email_input.email}: {verification_token}")
-    
-    return InviteOutput(message="User invited successfully. Verification token sent.")
+    # Logic to serve the GraphQL schema
+    # For example, you can use strawberry-graphql-fastapi package to integrate GraphQL with FastAPI
