@@ -1,13 +1,12 @@
 # src/schemas.py
-from strawberry import Schema
-from strawberry.field import field
-from strawberry.type import StrawberryType
+from strawberry import Schema, SubscriptionType, field
 from typing import List, Optional
+from datetime import datetime
 
-class User(StrawberryType):
+class User:
     """
     Represents a user in the system.
-    
+
     Attributes:
         id (int): Unique identifier for the user.
         name (str): Name of the user.
@@ -46,4 +45,17 @@ class Mutation:
         # This should be replaced with actual data creation logic
         return User(id=3, name=name, email=email, role=role)
 
-schema = Schema(query=Query, mutation=Mutation)
+class Subscription(SubscriptionType):
+    """
+    Defines subscription operations for the GraphQL schema.
+
+    Attributes:
+        user_created (User): Subscribes to new users being created.
+    """
+    @field(name="user_created")
+    def subscribe_user_created(self, info) -> User:
+        # This should be replaced with actual data retrieval logic
+        while True:
+            yield User(id=3, name="New User", email="newuser@example.com", role="guest")
+
+schema = Schema(query=Query, mutation=Mutation, subscription=Subscription)
