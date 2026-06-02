@@ -1,8 +1,14 @@
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
+from opentelemetry import trace
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
 Base = declarative_base()
+
+# Initialize OpenTelemetry tracer
+tracer = trace.get_tracer(__name__)
+SQLAlchemyInstrumentor().instrument(engine=engine)
 
 class User(Base):
     __tablename__ = "users"
