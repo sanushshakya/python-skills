@@ -17,7 +17,7 @@ app = Celery('tasks', broker='redis://localhost:6379/0')
 def send_password_reset_email(self, user_id: int):
     """
     Background task to send a password reset email.
-    
+
     Args:
         user_id (int): The ID of the user to reset the password for.
         
@@ -35,7 +35,7 @@ def send_password_reset_email(self, user_id: int):
 def send_email_verification_email(self, user_id: int):
     """
     Background task to send an email verification email.
-    
+
     Args:
         user_id (int): The ID of the user to verify.
         
@@ -52,7 +52,7 @@ def send_email_verification_email(self, user_id: int):
 def generate_email_verification_token(user_id: int):
     """
     Generates a JWT token for email verification.
-    
+
     Args:
         user_id (int): The ID of the user to verify.
         
@@ -69,7 +69,7 @@ def generate_email_verification_token(user_id: int):
 def generate_access_token(sub: str):
     """
     Generates a JWT access token.
-    
+
     Args:
         sub (str): The subject of the token (usually user ID).
         
@@ -86,7 +86,7 @@ def generate_access_token(sub: str):
 def generate_refresh_token(sub: str):
     """
     Generates a JWT refresh token.
-    
+
     Args:
         sub (str): The subject of the token (usually user ID).
         
@@ -102,21 +102,23 @@ def generate_refresh_token(sub: str):
 
 def verify_token(token: str):
     """
-    Verifies a JWT token and returns the subject.
-    
+    Verifies a JWT token and returns the payload.
+
     Args:
         token (str): The JWT token to verify.
         
     Returns:
-        str: The subject of the verified token.
+        dict: The decoded payload of the token if valid, otherwise raises an HTTPException.
     
     Raises:
-        HTTPException: If the token is invalid or expired.
+        HTTPException: If the token is invalid or has expired.
     """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("sub")
+        return payload
     except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Could not validate credentials",
-                            headers={"WWW-Authenticate": "Bearer"}
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
