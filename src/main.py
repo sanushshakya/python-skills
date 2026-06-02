@@ -1,16 +1,27 @@
 from fastapi import FastAPI, HTTPException, Depends, Security, status
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import uuid
+import logging
 
 # Initialize FastAPI app
 app = FastAPI(title="User Management API", description="A simple CRUD API for managing users.")
 
 # In-memory database simulation using a list
 users_db: List[dict] = []
+
+# Structured logger setup with correlation ID support
+logger = logging.getLogger("user_management")
+logging.basicConfig(level=logging.INFO)
+correlation_id_generator = lambda: str(uuid.uuid4())
+
+@app.middleware("http")
+async def add_correlation_id(request, call_next):
+    correlation_id = request.headers.get("X-Correlation-ID", correlation_id_generator())
+    request.state.correlation_id = correlation_id
+    logger = logging.getLogger(f"user_management.{correlation_id}")
+    response = await call_next(request)
+    return response
 
 # User model with additional profile fields and role is_verified fields
 class User(BaseModel):
@@ -83,22 +94,4 @@ def require_role(required_role: str):
         required_role (str): The role required for accessing the route.
 
     Returns:
-        dict: The user data of the currently authenticated user if they have the required role.
-    """
-    def inner_dependency(current_user: dict = Depends(get_current_user)):
-        if current_user["role"] != required_role:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
-        return current_user
-    return inner_dependency
-
-# Import new routes and configure the application to use them
-from src import chat_routes, summarization_routes, smart_search_routes
-
-app.include_router(chat_routes.router)
-app.include_router(summarization_routes.router)
-app.include_router(smart_search_routes.router)
-
-# Main entry point for running the API
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        dict: The user data of the currently authenticated user if they have the requir
