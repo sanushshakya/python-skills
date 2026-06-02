@@ -66,39 +66,26 @@ celery -A src.tasks worker --loglevel=info
 
 ### Email Notification Task
 
-An email notification task has been added to send verification emails after user registration. This task runs asynchronously using Celery.
+An email notification task has been added to send verification emails after user registration.
 
-**Example Usage:**
-```python
-from src.tasks import send_verification_email
+## New Features
 
-send_verification_email.delay(user_id, verification_token)
-```
+### Structured Logging with Correlation IDs
 
-## User Profile Fields
+The project now uses structured logging with correlation IDs to help trace requests through the system. This allows for better monitoring and debugging.
 
-The user profile now includes additional fields:
-- **Bio**: A brief description of the user.
-- **Profile Picture**: A link to the user's profile picture.
-- **Date of Birth**: The user's date of birth.
-- **Gender**: The user's gender (optional).
+### Prometheus Metrics Endpoint
 
-### New Endpoints
+A new `/metrics` endpoint has been added to provide metrics about the API's performance using Prometheus.
 
-#### GET /users/me
+### OpenTelemetry Tracing for Database Queries
 
-Retrieves the current authenticated user's details.
+OpenTelemetry tracing has been integrated into the database queries to provide visibility into query performance and help identify bottlenecks.
 
-**Response Schema:**
-```json
-{
-  "id": int,
-  "name": str,
-  "email": str,
-  "role": str,
-  "bio": str,
-  "profile_picture": str,
-  "date_of_birth": str,
-  "gender": str
-}
-```
+### Health Endpoints
+
+Health endpoints have been created to check the status of various components, such as the database connection and Redis. This helps ensure that the API is running smoothly and can quickly identify any issues.
+
+## Conclusion
+
+These new features and improvements make the User Management API more robust, secure, and efficient. By leveraging structured logging, Prometheus metrics, OpenTelemetry tracing, and health endpoints, developers can gain deeper insights into their application's performance and reliability.
