@@ -68,24 +68,29 @@ celery -A src.tasks worker --loglevel=info
 
 An email notification task has been added to send verification emails after user registration.
 
-## New Features
+## Installation
 
-### Structured Logging with Correlation IDs
+To install the dependencies, run:
 
-The project now uses structured logging with correlation IDs to help trace requests through the system. This allows for better monitoring and debugging.
+```bash
+pip install -r requirements.txt
+```
 
-### Prometheus Metrics Endpoint
+## Running the API
 
-A new `/metrics` endpoint has been added to provide metrics about the API's performance using Prometheus.
+To start the API server, run:
 
-### OpenTelemetry Tracing for Database Queries
+```bash
+uvicorn src.main:app --reload
+```
 
-OpenTelemetry tracing has been integrated into the database queries to provide visibility into query performance and help identify bottlenecks.
+This will start the FastAPI application on `http://127.0.0.1:8000`.
 
-### Health Endpoints
+## Documentation
 
-Health endpoints have been created to check the status of various components, such as the database connection and Redis. This helps ensure that the API is running smoothly and can quickly identify any issues.
+You can access the interactive API documentation by navigating to:
 
-## Conclusion
+- **FastAPI Docs**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
-These new features and improvements make the User Management API more robust, secure, and efficient. By leveraging structured logging, Prometheus metrics, OpenTelemetry tracing, and health endpoints, developers can gain deeper insights into their application's performance and reliability.
+These documentation pages will allow you to explore and interact with the API endpoints.
