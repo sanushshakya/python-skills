@@ -1,65 +1,120 @@
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from typing import Any, Callable, Dict, Optional
+from functools import wraps
+from sqlalchemy.orm import Session, joinedload
 from opentelemetry import trace
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-
-Base = declarative_base()
 
 # Initialize OpenTelemetry tracer
 tracer = trace.get_tracer(__name__)
-SQLAlchemyInstrumentor().instrument(engine=engine)
 
-class User(Base):
-    __tablename__ = "users"
+class DataLoader:
+    def __init__(self):
+        self.cache = {}
+        self.loaders = {}
 
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-    is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    def register(self, key: str, loader: Callable[[Any], Any]):
+        """
+        Register a loader function to be used for loading data by the given key.
 
-class UserProfile(Base):
-    __tablename__ = "user_profiles"
+        Args:
+            key (str): The key under which the loader is registered.
+            loader (Callable[[Any], Any]): The loader function that takes a single argument and returns a result.
+        """
+        self.loaders[key] = loader
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, index=True)
-    first_name = Column(String)
-    last_name = Column(String)
-    bio = Column(String)
-    profile_picture_url = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    def clear(self):
+        """
+        Clear the cache of all loaders.
+        """
+        self.cache.clear()
 
-    user = relationship("User", back_populates="profile")
+    def load(self, key: str, id: Any) -> Any:
+        """
+        Load data for the given key and ID.
 
-class AIAssistant(Base):
-    __tablename__ = "ai_assistants"
+        Args:
+            key (str): The key under which the loader is registered.
+            id (Any): The ID for which to load data.
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=False, index=True)
-    assistant_name = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+        Returns:
+            Any: The loaded data.
+        """
+        if key not in self.loaders:
+            raise KeyError(f"No loader registered for key '{key}'")
 
-    user = relationship("User", back_populates="ai_assistants")
+        if id not in self.cache:
+            with tracer.start_as_current_span("load"):
+                result = self.loaders[key](id)
+                self.cache[id] = result
 
-# Database connection setup
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        return self.cache[id]
 
-def get_db():
+def dataloader(key: str):
     """
-    Dependency function to provide a database session.
-    
+    Decorator to create a DataLoader instance and register the decorated function as a loader.
+
+    Args:
+        key (str): The key under which the loader is registered.
+    """
+    def decorator(func: Callable[[Any], Any]) -> Callable[[Any], Any]:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+        global dataloader_instance
+        if not hasattr(dataloader_instance, "loaders"):
+            dataloader_instance = DataLoader()
+        dataloader_instance.register(key, func)
+        return wrapper
+    return decorator
+
+dataloader_instance = None  # Global instance of the DataLoader
+
+def get_dataloader() -> DataLoader:
+    """
+    Retrieve the global DataLoader instance.
+
     Returns:
-        Session: A SQLAlchemy session instance.
+        DataLoader: The global DataLoader instance.
     """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    return dataloader_instance
+
+# Example usage in a SQLAlchemy query
+@sqlalchemy.orm.sessionmaker(bind=engine)
+def fetch_user_with_profile(db: Session, user_id: int) -> Dict[str, Any]:
+    with tracer.start_as_current_span("fetch_user_with_profile"):
+        user = db.query(User).options(joinedload(User.profile)).filter(User.id == user_id).first()
+        if not user:
+            raise ValueError(f"User with ID {user_id} not found")
+        
+        return {
+            "id": user.id,
+            "email": user.email,
+            "is_active": user.is_active,
+            "is_superuser": user.is_superuser,
+            "profile": {
+                "id": user.profile.id,
+                "first_name": user.profile.first_name,
+                "last_name": user.profile.last_name,
+                "bio": user.profile.bio,
+                "profile_picture_url": user.profile.profile_picture_url
+            }
+        }
+
+# Register the loader for fetching a user with their profile
+@dataloader("user_with_profile")
+def load_user_with_profile(user_id: int) -> Dict[str, Any]:
+    return fetch_user_with_profile(get_db(), user_id)
+
+# Usage example in a GraphQL resolver
+async def resolve_user(root, info, user_id):
+    """
+    Resolver function for fetching a user with their profile.
+
+    Args:
+        root (Any): The parent object from which the field is accessed.
+        info (GraphQlResolveInfo): Information about the current query execution state.
+        user_id (int): The ID of the user to fetch.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing user and profile information.
+    """
+    return await dataloader_instance.load("user_with_profile", user_id)
