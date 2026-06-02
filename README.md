@@ -52,6 +52,65 @@ The following events can trigger notifications:
 - **Login Success**: When a user successfully logs in.
 - **Logout**: When a user logs out.
 
+## GraphQL Endpoint
+
+A new GraphQL endpoint `/graphql` has been added to provide a more flexible and powerful way to access user data. The schema includes queries for retrieving users and mutations for creating, updating, and deleting users.
+
+### Example Queries
+
+```graphql
+# Retrieve all users
+query {
+  users {
+    id
+    name
+    email
+    role
+  }
+}
+
+# Retrieve a single user by ID
+query($id: ID!) {
+  user(id: $id) {
+    id
+    name
+    email
+    role
+  }
+}
+```
+
+### Example Mutations
+
+```graphql
+# Create a new user
+mutation {
+  createUser(name: "John Doe", email: "john.doe@example.com", password: "password123", role: "user") {
+    id
+    name
+    email
+    role
+  }
+}
+
+# Update an existing user
+mutation($id: ID!, $name: String, $email: String, $role: Role) {
+  updateUser(id: $id, name: $name, email: $email, role: $role) {
+    id
+    name
+    email
+    role
+  }
+}
+
+# Delete a user
+mutation($id: ID!) {
+  deleteUser(id: $id) {
+    id
+  }
+}
+```
+
 ## Background Tasks
 
 This project also leverages Celery and Redis for handling background tasks, such as sending email notifications. Celery acts as the task queue, while Redis serves as the message broker and cache.
@@ -67,30 +126,3 @@ celery -A src.tasks worker --loglevel=info
 ### Email Notification Task
 
 An email notification task has been added to send verification emails after user registration.
-
-## Installation
-
-To install the dependencies, run:
-
-```bash
-pip install -r requirements.txt
-```
-
-## Running the API
-
-To start the API server, run:
-
-```bash
-uvicorn src.main:app --reload
-```
-
-This will start the FastAPI application on `http://127.0.0.1:8000`.
-
-## Documentation
-
-You can access the interactive API documentation by navigating to:
-
-- **FastAPI Docs**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
-
-These documentation pages will allow you to explore and interact with the API endpoints.
