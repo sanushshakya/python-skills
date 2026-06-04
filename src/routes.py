@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from datetime import timedelta
 
 from src.auth import create_access_token, verify_token
 from src.models import User
@@ -78,8 +79,5 @@ async def github_callback(request: OAuthCallbackRequest, db: Session = Depends(g
         "sub": str(user_id),
         "exp": datetime.utcnow() + access_token_expires,
     }
-    access_token = create_access_token(access_token_data)
-
+    access_token = create_access_token(data=access_token_data)
     return {"access_token": access_token, "token_type": "bearer"}
-
-# Additional routes for Google OAuth2 login can be added similarly
