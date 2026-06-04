@@ -1,117 +1,69 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-import re
-from src.auth import verify_token, generate_email_verification_token
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
 
-# Initialize router
 router = APIRouter()
 
-# Define a Pydantic model for the query input
-class QueryInput(BaseModel):
-    """
-    Model to validate and store the natural language query.
-    
-    Args:
-        query (str): The user's input query.
-    """
-    query: str
+# Secret key used to encode and decode JWTs
+SECRET_KEY = "your_secret_key_here"
+ALGORITHM = "HS256"
 
-# Define a Pydantic model for the output filter
-class FilterOutput(BaseModel):
-    """
-    Model to represent the SQL filter generated from the query.
-    
-    Args:
-        filter_string (str): The SQL-like filter string.
-    """
-    filter_string: str
+# Token expiration times in minutes
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 
-# Sample mapping of keywords to SQL filter conditions
-KEYWORD_MAP = {
-    "age": "user_age",
-    "name": "user_name",
-    "email": "user_email"
-}
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
-def natural_language_to_sql_filter(query: str) -> str:
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
     """
-    Translates a natural language query into a SQL-like filter string.
-    
+    Creates a JWT token with the specified data and expiration time.
+
     Args:
-        query (str): The user's input query.
-    
+        data (dict): The data to be encoded in the token.
+        expires_delta (timedelta, optional): The duration for which the token is valid. Defaults to None.
+
     Returns:
-        str: The generated SQL-like filter string.
+        str: The encoded JWT token.
     """
-    # Tokenize the query
-    tokens = re.findall(r'\b\w+\b', query)
-    conditions = []
-    
-    for token in tokens:
-        if token.lower() in KEYWORD_MAP:
-            keyword = KEYWORD_MAP[token.lower()]
-            conditions.append(f"{keyword} LIKE '%{token}%'")
-    
-    return " AND ".join(conditions)
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
-# Define the smart-search endpoint
-@router.post("/ai/smart-search", response_model=FilterOutput)
-def smart_search(query_input: QueryInput, q: str = Depends(lambda: query_input.query)):
+
+@router.get("/auth/login", response_model=Token)
+async def login_for_access_token(request: Request):
     """
-    Endpoint to translate natural language queries into database filters.
-    
+    Handles the OAuth2 callback from Google and stores provider and user ID.
+
     Args:
-        query_input (QueryInput): The input containing the natural language query.
-    
+        request (Request): The incoming HTTP request.
+
     Returns:
-        FilterOutput: The generated SQL-like filter string.
-    
-    Raises:
-        HTTPException: If the query is empty or invalid.
+        Token: A JSON object containing the access token.
     """
-    # Validate the query
-    if not q.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Query cannot be empty"
-        )
-    
-    # Generate the SQL filter
-    sql_filter = natural_language_to_sql_filter(q)
-    
-    return FilterOutput(filter_string=sql_filter)
+    # Placeholder logic for OAuth2 authentication with Google
+    # In a real-world application, you would handle the OAuth2 flow here
+    # and retrieve the provider and user ID from the callback URL
 
-# WebSocket endpoint for real-time notifications
-@router.websocket("/ws/notifications/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: int):
-    """
-    WebSocket endpoint to send real-time notifications to a specific user.
-    
-    Args:
-        websocket (WebSocket): The WebSocket connection object.
-        user_id (int): The ID of the user to receive notifications.
-    """
-    await websocket.accept()
-    try:
-        while True:
-            data = await websocket.receive_text()
-            if data == "close":
-                await websocket.close()
-                break
-            # Logic to send notifications based on user_id
-            # For example, you can use Celery to asynchronously send messages
+    provider = "google"
+    user_id = "123456789"
 
-# GraphQL endpoint
-@router.get("/graphql", include_in_schema=False)
-async def graphql_endpoint(request):
-    """
-    Endpoint to expose the GraphQL schema.
-    
-    Args:
-        request: The incoming HTTP request object.
-    
-    Returns:
-        JSON response containing the GraphQL schema.
-    """
-    # Logic to serve the GraphQL schema
-    # For example, you can use strawberry-graphql-fastapi package to integrate GraphQL with FastAPI
+    # Create a payload with the provider and user ID
+    payload = {"provider": provider, "user_id": user_id}
+
+    # Generate an access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user_id}, expires_delta=access_token_expires
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
