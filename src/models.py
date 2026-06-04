@@ -41,6 +41,10 @@ class User(Base):
     github_oauth2_provider_id = Column(Integer, ForeignKey('github_oauth2_provider.id'), index=True)
     github_oauth2_provider = relationship("GitHubOAuth2Provider", back_populates="users")
 
+    # New fields for storing the OAuth2 provider and user ID
+    provider = Column(String, nullable=True)
+    provider_user_id = Column(String, nullable=True)
+
 # Example usage in other parts of the application
 # from sqlalchemy import create_engine
 # engine = create_engine('sqlite:///./test.db', connect_args={"check_same_thread": False})
