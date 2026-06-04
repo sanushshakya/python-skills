@@ -1,69 +1,49 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+"""Routes for handling OAuth2 login and account linking."""
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
+
+from src.auth import create_access_token, verify_token
+from src.models import User
+from src.database import get_db
 
 router = APIRouter()
 
-# Secret key used to encode and decode JWTs
-SECRET_KEY = "your_secret_key_here"
-ALGORITHM = "HS256"
+class OAuthCallbackRequest(BaseModel):
+    """Pydantic model for the GitHub OAuth2 callback request."""
+    state: str
+    code: str
 
-# Token expiration times in minutes
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-
-def create_access_token(data: dict, expires_delta: timedelta = None):
+@router.get("/github/login")
+async def github_login():
     """
-    Creates a JWT token with the specified data and expiration time.
+    Redirect the user to the GitHub login page.
+    """
+    # Implement the logic to redirect the user to the GitHub login page with a unique state parameter
+    pass
 
+@router.get("/github/callback", response_model=User)
+async def github_callback(request: OAuthCallbackRequest, db: Session = Depends(get_db)):
+    """
+    Handle the GitHub OAuth2 callback and store provider and user ID.
+    
     Args:
-        data (dict): The data to be encoded in the token.
-        expires_delta (timedelta, optional): The duration for which the token is valid. Defaults to None.
-
+        request (OAuthCallbackRequest): The GitHub OAuth2 callback request containing state and code parameters.
+        db (Session, optional): SQLAlchemy session dependency. Defaults to Depends(get_db).
+        
     Returns:
-        str: The encoded JWT token.
+        User: The created or updated user record.
     """
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    # Implement the logic to handle the GitHub OAuth2 callback
+    # Verify the state parameter for CSRF protection
+    # Exchange the authorization code for an access token using the GitHub API
+    # Fetch the user details from the GitHub API
+    # Create or update the user record in the database with provider and user ID
+    
+    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not Implemented")
 
+# Additional routes for Google OAuth2 login can be added similarly
+```
 
-@router.get("/auth/login", response_model=Token)
-async def login_for_access_token(request: Request):
-    """
-    Handles the OAuth2 callback from Google and stores provider and user ID.
-
-    Args:
-        request (Request): The incoming HTTP request.
-
-    Returns:
-        Token: A JSON object containing the access token.
-    """
-    # Placeholder logic for OAuth2 authentication with Google
-    # In a real-world application, you would handle the OAuth2 flow here
-    # and retrieve the provider and user ID from the callback URL
-
-    provider = "google"
-    user_id = "123456789"
-
-    # Create a payload with the provider and user ID
-    payload = {"provider": provider, "user_id": user_id}
-
-    # Generate an access token
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user_id}, expires_delta=access_token_expires
-    )
-
-    return {"access_token": access_token, "token_type": "bearer"}
+Please note that this is a skeleton implementation and does not include actual logic for interacting with GitHub's OAuth2 API or handling the state parameter for CSRF protection. You will need to implement these details based on your specific requirements and security considerations.
