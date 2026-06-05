@@ -1,7 +1,8 @@
 from fastapi import Depends, HTTPException, status
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
-from celery import Celery
+from typing import Union
+from fastapi.security import OAuth2PasswordBearer, APIKey
 
 # Secret key used to encode and decode JWTs
 SECRET_KEY = "your_secret_key_here"
@@ -11,114 +12,97 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 
-app = Celery('tasks', broker='redis://localhost:6379/0')
+# OAuth2 scheme for JWT authentication
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-@app.task(bind=True, ignore_result=True)
-def send_password_reset_email(self, user_id: int):
-    """
-    Background task to send a password reset email.
-
-    Args:
-        user_id (int): The ID of the user to reset the password for.
-        
-    Raises:
-        HTTPException: If there is an issue sending the email.
-    """
-    try:
-        # Logic to send email
-        pass
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Error sending password reset email: {str(e)}")
-
-@app.task(bind=True, ignore_result=True)
-def send_email_verification_email(self, user_id: int):
-    """
-    Background task to send an email verification email.
-
-    Args:
-        user_id (int): The ID of the user to verify.
-        
-    Raises:
-        HTTPException: If there is an issue sending the email.
-    """
-    try:
-        # Logic to send email
-        pass
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Error sending verification email: {str(e)}")
-
-def generate_email_verification_token(user_id: int):
-    """
-    Generates a JWT token for email verification.
-
-    Args:
-        user_id (int): The ID of the user to verify.
-        
-    Returns:
-        str: A JWT token for email verification.
-    """
-    payload = {
-        "sub": str(user_id),
-        "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    }
-    encoded_jwt = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-def generate_access_token(sub: str):
-    """
-    Generates a JWT access token.
-
-    Args:
-        sub (str): The subject of the token (usually user ID).
-        
-    Returns:
-        str: A JWT access token.
-    """
-    payload = {
-        "sub": sub,
-        "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    }
-    encoded_jwt = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-def generate_refresh_token(sub: str):
-    """
-    Generates a JWT refresh token.
-
-    Args:
-        sub (str): The subject of the token (usually user ID).
-        
-    Returns:
-        str: A JWT refresh token.
-    """
-    payload = {
-        "sub": sub,
-        "exp": datetime.utcnow() + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
-    }
-    encoded_jwt = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+# API key security dependency
+api_key_scheme = APIKey(header_name="X-API-KEY", auto_error=False)
 
 def verify_token(token: str):
     """
     Verifies a JWT token and returns the payload.
-
+    
     Args:
         token (str): The JWT token to verify.
         
     Returns:
-        dict: The decoded payload of the token if valid, otherwise raises an HTTPException.
-    
+        dict: The payload of the token if valid, None otherwise.
+        
     Raises:
-        HTTPException: If the token is invalid or has expired.
+        HTTPException: If the token is invalid or expired.
     """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Could not validate credentials",
+                            headers={"WWW-Authenticate": "Bearer"})
+
+def verify_api_key(api_key: str):
+    """
+    Verifies if the provided API key is valid.
+    
+    Args:
+        api_key (str): The API key to verify.
+        
+    Returns:
+        bool: True if the API key is valid, False otherwise.
+        
+    Raises:
+        HTTPException: If the API key is not provided or is invalid.
+    """
+    # Replace this with your logic to check if the API key is valid
+    if api_key != "your_api_key_here":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Could not validate API key")
+    return True
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    """
+    Dependency to get the current authenticated user.
+    
+    Args:
+        token (str): The JWT token from the Authorization header.
+        
+    Returns:
+        dict: The payload of the token if valid, None otherwise.
+        
+    Raises:
+        HTTPException: If the token is invalid or expired.
+    """
+    return verify_token(token)
+
+async def get_current_api_key(api_key: str = Depends(api_key_scheme)):
+    """
+    Dependency to get the current API key.
+    
+    Args:
+        api_key (str): The API key from the X-API-KEY header.
+        
+    Returns:
+        str: The valid API key if provided, None otherwise.
+        
+    Raises:
+        HTTPException: If the API key is not provided or is invalid.
+    """
+    return verify_api_key(api_key)
+
+async def get_current_user_or_api_key(token: str = Depends(oauth2_scheme), api_key: str = Depends(api_key_scheme)):
+    """
+    Dependency to get the current authenticated user or validate an API key.
+    
+    Args:
+        token (str): The JWT token from the Authorization header.
+        api_key (str): The API key from the X-API-KEY header.
+        
+    Returns:
+        dict/str: The payload of the token if valid, the API key if valid, None otherwise.
+        
+    Raises:
+        HTTPException: If neither the token nor the API key is valid or expired.
+    """
+    try:
+        return await get_current_user(token)
+    except HTTPException as e:
+        return await get_current_api_key(api_key)
