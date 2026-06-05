@@ -5,6 +5,7 @@ import uuid
 import logging
 from prometheus_client import start_http_server, Counter, Gauge
 import time
+from fastapi.security import OAuth2PasswordBearer, APIKey
 
 # Initialize FastAPI app
 app = FastAPI(title="User Management API", description="A simple CRUD API for managing users.")
@@ -78,37 +79,101 @@ def get_user(user_id: int) -> dict:
     raise HTTPException(status_code=404, detail="User not found")
 
 # Dependency to get current active user
-def get_current_user(user_id: int = Depends(get_user)):
+def get_current_user(token: str = Depends(OAuth2PasswordBearer(tokenUrl="/auth/login"))):
     """
-    Get the current active user based on their ID.
+    Get the currently authenticated user.
 
     Args:
-        user_id (int): The ID of the current user.
+        token (str): JWT access token.
 
     Returns:
         dict: The current user's data.
     """
-    return user
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
 
-# Health endpoint to check if the application is up
-@app.get("/health")
-async def health():
+# Add API key model and endpoints for key management
+class ApiKey(BaseModel):
+    api_key: str
+    description: Optional[str]
+
+@app.post("/api-keys/", response_model=ApiKey)
+async def create_api_key(api_key_data: ApiKey):
     """
-    Check the overall status of the application.
+    Create a new API key.
+
+    Args:
+        api_key_data (ApiKey): The data for the new API key.
 
     Returns:
-        dict: A dictionary indicating that the application is healthy.
+        ApiKey: The created API key.
     """
-    return {"status": "healthy"}
+    api_keys_db.append(api_key_data.dict())
+    return api_key_data
 
-# Detailed health endpoint to provide more information about the application's status
-@app.get("/health/detailed")
-async def health_detailed():
+@app.get("/api-keys/", response_model=List[ApiKey])
+async def list_api_keys():
     """
-    Provide detailed information about the application's status, including database connection and service availability.
+    List all API keys.
 
     Returns:
-        dict: A dictionary with detailed health information.
+        List[ApiKey]: A list of API keys.
     """
-    # Add logic here to check additional health metrics such as database connectivity
-    return {"status": "healthy", "database": {"connected": True}, "services": {"available": ["auth", "db"]}}
+    return api_keys_db
+
+# Add JWT and API key authentication support
+def authenticate_user(api_key: str):
+    """
+    Authenticate a user using an API key.
+
+    Args:
+        api_key (str): The API key to authenticate.
+
+    Returns:
+        bool: True if the API key is valid, False otherwise.
+    """
+    for key in api_keys_db:
+        if key["api_key"] == api_key:
+            return True
+    return False
+
+# Add per-key rate limiting
+rate_limiters = {}
+
+@app.middleware("http")
+async def add_rate_limiter(request, call_next):
+    """
+    Apply rate limiting based on the API key.
+
+    Args:
+        request (Request): The incoming HTTP request.
+
+    Returns:
+        Response: The response from the next middleware or endpoint.
+    """
+    api_key = request.headers.get("X-API-Key")
+    if api_key:
+        limit = 10  # Maximum requests per minute
+        window = 60  # Time window in seconds
+        now = time.time()
+        if api_key not in rate_limiters:
+            rate_limiters[api_key] = [now]
+        else:
+            rate_limiters[api_key].append(now)
+            rate_limiters[api_key] = [t for t in rate_limiters[api_key] if t >= now - window]
+        if len(rate_limiters[api_key]) > limit:
+            raise HTTPException(status_code=429, detail="Too Many Requests")
+    return await call_next(request)
+
+# Add OpenAPI docs per version
+app.include_router(api_router, prefix="/v1", tags=["users"])
