@@ -28,6 +28,11 @@ def create_celery_app():
         result_serializer='json',
         timezone='UTC',
         enable_utc=True,
+        # Additional security and best practice configurations
+        security_cert_store_path='/path/to/certs',  # Path to SSL certificates for secure communication
+        task_acks_late=True,  # Acknowledge tasks after the task has been executed successfully
+        worker_concurrency=4,  # Number of worker processes to run simultaneously
+        result_expires=3600,  # Time (in seconds) until results expire
     )
 
     return celery_app
