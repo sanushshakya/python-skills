@@ -7,8 +7,11 @@ from typing import Optional, List
 class APIKey(BaseModel):
     """
     Represents an API Key with hashed_key, name, scopes, rate_limit, and last_used fields.
-    """
     
+    This model ensures that the API key is secure by using a hashed representation of the key,
+    storing relevant metadata about the API key, and providing methods for updating the last used timestamp.
+    """
+
     __tablename__ = "api_keys"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -23,5 +26,8 @@ class APIKey(BaseModel):
     def update_last_used(self):
         """
         Updates the last_used field with the current timestamp.
+        
+        This method ensures that the API key's last used timestamp is always up-to-date,
+        which can be useful for rate limiting and monitoring purposes.
         """
         self.last_used = datetime.utcnow()
