@@ -94,15 +94,57 @@ async def get_current_user_or_api_key(token: str = Depends(oauth2_scheme), api_k
     
     Args:
         token (str): The JWT token from the Authorization header.
-        api_key (str): The API key from the X-API-KEY header.
+        api_key (str):
         
     Returns:
-        dict/str: The payload of the token if valid, the API key if valid, None otherwise.
+        Union[dict, None]: The payload of the token if valid, otherwise None.
         
     Raises:
-        HTTPException: If neither the token nor the API key is valid or expired.
+        HTTPException: If both token and API key are invalid or expired.
     """
     try:
-        return await get_current_user(token)
-    except HTTPException as e:
-        return await get_current_api_key(api_key)
+        return verify_token(token)
+    except Exception:
+        return verify_api_key(api_key)
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """
+    Creates a new JWT access token with the specified data and expiration time.
+    
+    Args:
+        data (dict): The data to encode in the token.
+        expires_delta (Optional[timedelta]): The time until the token expires. If not provided, uses default ACCESS_TOKEN_EXPIRE_MINUTES.
+        
+    Returns:
+        str: The encoded JWT access token.
+    """
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """
+    Creates a new JWT refresh token with the specified data and expiration time.
+    
+    Args:
+        data (dict): The data to encode in the token.
+        expires_delta (Optional[timedelta]): The time until the token expires. If not provided, uses default REFRESH_TOKEN_EXPIRE_MINUTES.
+        
+    Returns:
+        str: The encoded JWT refresh token.
+    """
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# Add these functions to handle token creation and verification
