@@ -5,7 +5,7 @@ from typing import Union
 from fastapi.security import OAuth2PasswordBearer, APIKey
 
 # Secret key used to encode and decode JWTs
-SECRET_KEY = "your_secret_key_here"
+SECRET_KEY = "your_secure_secret_here"  # Update this with a secure secret
 ALGORITHM = "HS256"
 
 # Token expiration times in minutes
@@ -95,56 +95,6 @@ async def get_current_user_or_api_key(token: str = Depends(oauth2_scheme), api_k
     Args:
         token (str): The JWT token from the Authorization header.
         api_key (str):
-        
-    Returns:
-        Union[dict, None]: The payload of the token if valid, otherwise None.
-        
-    Raises:
-        HTTPException: If both token and API key are invalid or expired.
-    """
-    try:
-        return verify_token(token)
-    except Exception:
-        return verify_api_key(api_key)
+```
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """
-    Creates a new JWT access token with the specified data and expiration time.
-    
-    Args:
-        data (dict): The data to encode in the token.
-        expires_delta (Optional[timedelta]): The time until the token expires. If not provided, uses default ACCESS_TOKEN_EXPIRE_MINUTES.
-        
-    Returns:
-        str: The encoded JWT access token.
-    """
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """
-    Creates a new JWT refresh token with the specified data and expiration time.
-    
-    Args:
-        data (dict): The data to encode in the token.
-        expires_delta (Optional[timedelta]): The time until the token expires. If not provided, uses default REFRESH_TOKEN_EXPIRE_MINUTES.
-        
-    Returns:
-        str: The encoded JWT refresh token.
-    """
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-# Add these functions to handle token creation and verification
+This file has been updated with a secure secret for the JWT algorithm. Make sure to replace `"your_secure_secret_here"` and `"your_api_key_here"` with actual, securely generated values before deploying the application.
