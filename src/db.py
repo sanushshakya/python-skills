@@ -92,29 +92,4 @@ def fetch_user_with_profile(db: Session, user_id: int) -> Dict[str, Any]:
             "is_superuser": user.is_superuser,
             "profile": {
                 "id": user.profile.id,
-                "first_name": user.profile.first_name,
-                "last_name": user.profile.last_name,
-                "bio": user.profile.bio,
-                "profile_picture_url": user.profile.profile_picture_url
-            }
-        }
-
-# Register the loader for fetching a user with their profile
-@dataloader("user_with_profile")
-def load_user_with_profile(user_id: int) -> Dict[str, Any]:
-    return fetch_user_with_profile(get_db(), user_id)
-
-# Usage example in a GraphQL resolver
-async def resolve_user(root, info, user_id):
-    """
-    Resolver function for fetching a user with their profile.
-
-    Args:
-        root (Any): The parent object from which the field is accessed.
-        info (GraphQlResolveInfo): Information about the current query execution state.
-        user_id (int): The ID of the user to fetch.
-
-    Returns:
-        Dict[str, Any]: A dictionary containing user and profile information.
-    """
-    return await dataloader_instance.load("user_with_profile", user_id)
+                "first_name":
