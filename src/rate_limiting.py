@@ -5,12 +5,13 @@ This module defines a middleware to apply rate limits based on API keys,
 using an in-memory dictionary to store request counts.
 """
 
-from fastapi import Request, HTTPException, status, Depends
+from fastapi import Request, HTTPException, status
 from datetime import datetime
 import time
+from typing import Dict, Union
 
 # Dictionary to store rate limit data (key: API key, value: (last_request_time, request_count))
-rate_limit_data = {}
+rate_limit_data: Dict[str, Tuple[float, int]] = {}
 
 async def rate_limiter(request: Request):
     """
